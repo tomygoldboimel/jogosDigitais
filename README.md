@@ -41,6 +41,16 @@ Usar o horário registrado pelo próprio Arduino deixa a medição do tempo de r
 
 No código, o jogo conversa apenas com a interface `SensorIoT`. Assim, dá para testar com o teclado (`SensorTeclado`) e depois trocar pelo Arduino (`SensorSerial`) sem mudar as telas.
 
+## Andamento do desenvolvimento
+
+- [x] Estrutura do projeto libGDX, menu e tela de jogo
+- [x] Dois botões alternados (teclado simulando o controle)
+- [ ] Avaliação do toque (Perfeito, Bom, Cedo, Tarde, Perdida) e pontuação
+- [ ] Partitura e 5 fases com dificuldade progressiva
+- [ ] Métricas, tela de resultado e histórico de tentativas
+- [ ] Cenário, personagem e sons
+- [ ] Integração com o controle Arduino
+
 ## Como executar
 
 Pré-requisito: JDK 17 ou superior.
@@ -51,7 +61,7 @@ Pré-requisito: JDK 17 ou superior.
 
 # gerar o executável (.jar) em lwjgl3/build/libs/
 ./gradlew lwjgl3:dist
-java -jar lwjgl3/build/libs/MaestroDoCaos-0.1.0.jar
+java -jar lwjgl3/build/libs/MaestroDoCaos-0.2.0.jar
 ```
 
 No Windows, use `gradlew.bat` no lugar de `./gradlew`.
@@ -75,7 +85,7 @@ core/       lógica do jogo (independente de plataforma)
   br.mackenzie.maestro
     MaestroDoCaos        classe principal (recursos compartilhados)
     screens/             telas: menu e jogo
-    sensor/              interface SensorIoT e implementações (teclado e Arduino)
+    sensor/              interface SensorIoT, Lado, Toque e implementações (teclado e Arduino)
 lwjgl3/     versão desktop (ponto de entrada)
 assets/     imagens, sons e fontes
 ```
