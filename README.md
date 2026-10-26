@@ -16,6 +16,21 @@ O treino de reação costuma ser repetitivo e cansativo. O Maestro do Caos trans
 - As fases ficam mais difíceis aos poucos: a bolinha acelera, o ritmo muda e aparecem trechos de pausa em que o paciente precisa segurar a resposta.
 - O cenário reage ao desempenho: quando o paciente acerta, a lua brilha e as flores de lótus se abrem no lago; quando erra, a névoa escurece a cena.
 
+## Avaliação de cada resposta
+
+O desvio é a diferença entre o toque e a chegada da bolinha ao alvo.
+
+| Resultado | Quando acontece | Pontos |
+|---|---|---|
+| Perfeito | Botão certo, até 90 ms de desvio | 100 |
+| Bom | Botão certo, até 200 ms de desvio | 60 |
+| Cedo / Tarde | Botão certo, mas com desvio maior (janela de 400 ms antes e 450 ms depois) | 20 |
+| Perdida | A janela fechou sem nenhum toque | 0 |
+| Botão errado | Apertou o lado errado (ou o mesmo lado duas vezes seguidas) | 0 |
+| Fora de hora | Apertou longe de qualquer estímulo | 0 |
+
+Acertos seguidos (Perfeito ou Bom) formam um **combo**, que multiplica os pontos até 3 vezes. Qualquer outro resultado zera o combo.
+
 ## Métricas de evolução
 
 | Métrica | O que mede |
@@ -45,7 +60,7 @@ No código, o jogo conversa apenas com a interface `SensorIoT`. Assim, dá para 
 
 - [x] Estrutura do projeto libGDX, menu e tela de jogo
 - [x] Dois botões alternados (teclado simulando o controle)
-- [ ] Avaliação do toque (Perfeito, Bom, Cedo, Tarde, Perdida) e pontuação
+- [x] Avaliação do toque (Perfeito, Bom, Cedo, Tarde, Perdida) e pontuação
 - [ ] Partitura e 5 fases com dificuldade progressiva
 - [ ] Métricas, tela de resultado e histórico de tentativas
 - [ ] Cenário, personagem e sons
@@ -61,7 +76,7 @@ Pré-requisito: JDK 17 ou superior.
 
 # gerar o executável (.jar) em lwjgl3/build/libs/
 ./gradlew lwjgl3:dist
-java -jar lwjgl3/build/libs/MaestroDoCaos-0.2.0.jar
+java -jar lwjgl3/build/libs/MaestroDoCaos-0.3.0.jar
 ```
 
 No Windows, use `gradlew.bat` no lugar de `./gradlew`.
@@ -84,6 +99,7 @@ No macOS, para rodar o `.jar` direto, adicione `-XstartOnFirstThread`: `java -Xs
 core/       lógica do jogo (independente de plataforma)
   br.mackenzie.maestro
     MaestroDoCaos        classe principal (recursos compartilhados)
+    logica/              regras do jogo em Java puro: Regente (relógio e avaliação), Pontuacao
     screens/             telas: menu e jogo
     sensor/              interface SensorIoT, Lado, Toque e implementações (teclado e Arduino)
 lwjgl3/     versão desktop (ponto de entrada)
