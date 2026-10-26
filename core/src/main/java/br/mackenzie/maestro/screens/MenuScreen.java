@@ -40,8 +40,10 @@ public class MenuScreen extends ScreenAdapter {
 
         jogo.batch.begin();
         escreverCentralizado("Maestro do Caos", 3f, Cores.DOURADO, 470f);
-        escreverCentralizado("Jogo sério para reabilitação motora com bicicleta ergométrica", 1.3f, Cores.TEXTO, 380f);
-        escreverCentralizado("ENTER para começar     ESC para sair", 1.3f, Cores.TEXTO_SUAVE, 250f);
+        escreverCentralizado("Jogo sério para reabilitação da reação motora", 1.3f, Cores.TEXTO, 380f);
+        escreverCentralizado("Aperte os dois botões de forma alternada quando a bolinha chegar ao alvo", 1.1f, Cores.TEXTO_SUAVE, 340f);
+        escreverCentralizado("Botão esquerdo: A ou seta esquerda     Botão direito: D ou seta direita", 1.1f, Cores.TEXTO_SUAVE, 310f);
+        escreverCentralizado("ENTER para começar     ESC para sair", 1.3f, Cores.TEXTO_SUAVE, 230f);
         jogo.batch.end();
     }
 
