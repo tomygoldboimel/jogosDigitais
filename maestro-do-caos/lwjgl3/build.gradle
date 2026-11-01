@@ -1,0 +1,40 @@
+import org.gradle.internal.os.OperatingSystem
+
+apply plugin: 'application'
+
+def launcher = 'br.mackenzie.maestro.lwjgl3.Lwjgl3Launcher'
+
+application {
+    mainClass = launcher
+}
+
+sourceSets.main.resources.srcDirs += [rootProject.file('assets').path]
+
+dependencies {
+    implementation project(':core')
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+    implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+run {
+    workingDir = rootProject.file('assets')
+    // no macOS a janela do LWJGL3 precisa rodar na thread principal
+    if (OperatingSystem.current() == OperatingSystem.MAC_OS) {
+        jvmArgs += ['-XstartOnFirstThread']
+    }
+}
+
+// gera um .jar executável único (o "executável" pedido na entrega)
+tasks.register('dist', Jar) {
+    group = 'build'
+    description = 'Gera o jar executável do jogo com todas as dependências.'
+    archiveBaseName = 'MaestroDoCaos'
+    archiveVersion = projectVersion
+    manifest {
+        attributes 'Main-Class': launcher
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    dependsOn configurations.runtimeClasspath
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    with jar
+}
