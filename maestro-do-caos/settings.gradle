@@ -1,2 +1,0 @@
-rootProject.name = 'maestro-do-caos'
-include 'core', 'lwjgl3'
