@@ -16,6 +16,26 @@ O treino de reação costuma ser repetitivo e cansativo. O Maestro do Caos trans
 - As fases ficam mais difíceis aos poucos: a bolinha acelera, o ritmo muda e aparecem trechos de pausa em que o paciente precisa segurar a resposta.
 - O cenário reage ao desempenho: quando o paciente acerta, a lua brilha e as flores de lótus se abrem no lago; quando erra, a névoa escurece a cena.
 
+## Fases
+
+Cada fase tem uma partitura com três tipos de trecho:
+
+| Trecho | O que o paciente faz | O que treina |
+|---|---|---|
+| Ritmo | Aperta quando a bolinha chega ao alvo | Sincronia com um estímulo previsível |
+| Pausa | A bolinha continua girando, mas ele não deve apertar | Controle inibitório (segurar a resposta) |
+| Reflexo | A bolinha some e o alvo acende de surpresa | Tempo de reação a um estímulo imprevisível |
+
+| Fase | Nome | Partitura |
+|---|---|---|
+| 1 | Largo | Ritmo lento e constante (40 batidas por minuto), janela mais tolerante |
+| 2 | Andante | Ritmo a 48, pausa e ritmo a 54 |
+| 3 | Accelerando | O andamento acelera de 45 para 68 e depois desacelera |
+| 4 | Reflexo | Reflexo, ritmo a 55 e reflexo de novo, com esperas sorteadas |
+| 5 | Caos | Tudo junto, mais rápido e com janela 10% menor |
+
+As fases ficam em `logica/Fases.java`: dá para ajustar andamentos, quantidade de batidas e tolerância sem mexer no resto do código.
+
 ## Avaliação de cada resposta
 
 O desvio é a diferença entre o toque e a chegada da bolinha ao alvo.
@@ -29,19 +49,27 @@ O desvio é a diferença entre o toque e a chegada da bolinha ao alvo.
 | Botão errado | Apertou o lado errado (ou o mesmo lado duas vezes seguidas) | 0 |
 | Fora de hora | Apertou longe de qualquer estímulo | 0 |
 
-Acertos seguidos (Perfeito ou Bom) formam um **combo**, que multiplica os pontos até 3 vezes. Qualquer outro resultado zera o combo.
+No **reflexo**, conta o tempo de reação desde o alvo acender: até 450 ms é Perfeito, até 700 ms é Bom e depois disso é Tarde. Sem toque em 1 segundo, a resposta é Perdida. Apertar antes de acender é Fora de hora.
+
+Na **pausa**, cada batida em que o paciente não aperta vale **Segurou** (50 pontos); apertar é Fora de hora.
+
+Acertos seguidos (Perfeito, Bom ou Segurou) formam um **combo**, que multiplica os pontos até 3 vezes. Qualquer outro resultado zera o combo.
 
 ## Métricas de evolução
 
 | Métrica | O que mede |
 |---|---|
-| Tempo de reação | Diferença, em milissegundos, entre o estímulo e o toque no botão |
-| Precisão | Proporção de respostas Perfeito e Bom |
-| Erros de botão | Toques no botão errado ou repetidos |
-| Coordenação bilateral | Diferença de desempenho entre o lado esquerdo e o direito |
-| Regularidade | Estabilidade do intervalo entre as respostas |
+| Precisão | Proporção de respostas Perfeito e Bom nos trechos de ritmo e reflexo |
+| Tempo de reação | Média, em milissegundos, entre o alvo acender e o toque, nos trechos de reflexo |
+| Erro de sincronia | Distância média entre o toque e a chegada da bolinha, nos trechos de ritmo |
+| Regularidade | Desvio padrão desses desvios: quanto menor, mais constante é o intervalo entre as respostas |
+| Erros de botão | Toques no botão errado, repetidos ou fora de hora |
+| Controle inibitório | Proporção das batidas de pausa em que o paciente conseguiu segurar a resposta |
+| Coordenação bilateral | Diferença de precisão entre o lado esquerdo e o direito, em pontos percentuais |
 
-Os resultados de cada tentativa ficam salvos, para comparar a evolução do paciente entre as sessões.
+No fim de cada fase, a tela de resultado mostra essas métricas, compara com a tentativa anterior da mesma fase (melhorou, piorou ou igual), indica o lado que precisa de reforço e lista as últimas tentativas.
+
+Os resultados ficam salvos entre as sessões e também são gravados em `historico-maestro.csv`, na pasta onde o jogo foi aberto (com `./gradlew lwjgl3:run`, é a pasta `assets/`). O CSV pode ser aberto em uma planilha para montar os gráficos de evolução do short paper.
 
 ## Dispositivo IoT
 
@@ -61,8 +89,8 @@ No código, o jogo conversa apenas com a interface `SensorIoT`. Assim, dá para 
 - [x] Estrutura do projeto libGDX, menu e tela de jogo
 - [x] Dois botões alternados (teclado simulando o controle)
 - [x] Avaliação do toque (Perfeito, Bom, Cedo, Tarde, Perdida) e pontuação
-- [ ] Partitura e 5 fases com dificuldade progressiva
-- [ ] Métricas, tela de resultado e histórico de tentativas
+- [x] Partitura e 5 fases com dificuldade progressiva
+- [x] Métricas, tela de resultado e histórico de tentativas
 - [ ] Cenário, personagem e sons
 - [ ] Integração com o controle Arduino
 
@@ -76,7 +104,7 @@ Pré-requisito: JDK 17 ou superior.
 
 # gerar o executável (.jar) em lwjgl3/build/libs/
 ./gradlew lwjgl3:dist
-java -jar lwjgl3/build/libs/MaestroDoCaos-0.3.0.jar
+java -jar lwjgl3/build/libs/MaestroDoCaos-0.5.0.jar
 ```
 
 No Windows, use `gradlew.bat` no lugar de `./gradlew`.
@@ -88,7 +116,8 @@ No macOS, para rodar o `.jar` direto, adicione `-XstartOnFirstThread`: `java -Xs
 |---|---|
 | Botão esquerdo do Arduino (ou tecla ← / A) | Resposta do lado esquerdo |
 | Botão direito do Arduino (ou tecla → / D) | Resposta do lado direito |
-| ENTER | Começar (no menu) |
+| Setas cima/baixo ou 1 a 5 | Escolher a fase (no menu) |
+| ENTER | Começar (no menu) ou ir para a próxima fase |
 | P | Pausar / continuar |
 | R | Reiniciar a fase |
 | M ou ESC | Voltar ao menu |
@@ -99,8 +128,9 @@ No macOS, para rodar o `.jar` direto, adicione `-XstartOnFirstThread`: `java -Xs
 core/       lógica do jogo (independente de plataforma)
   br.mackenzie.maestro
     MaestroDoCaos        classe principal (recursos compartilhados)
-    logica/              regras do jogo em Java puro: Regente (relógio e avaliação), Pontuacao
-    screens/             telas: menu e jogo
+    logica/              regras do jogo em Java puro: Regente (relógio e avaliação), Partitura,
+                         Trecho, Fases, Pontuacao, Metricas e Historico
+    screens/             telas: menu, jogo e resultado
     sensor/              interface SensorIoT, Lado, Toque e implementações (teclado e Arduino)
 lwjgl3/     versão desktop (ponto de entrada)
 assets/     imagens, sons e fontes
