@@ -1,0 +1,19 @@
+subprojects {
+    apply plugin: 'java-library'
+
+    group = 'br.mackenzie.maestro'
+    version = projectVersion
+
+    java {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
+    repositories {
+        mavenCentral()
+    }
+}
