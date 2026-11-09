@@ -3,24 +3,30 @@ package br.mackenzie.maestro.sensor;
 import java.util.List;
 
 /**
- * Fonte dos toques nos dois botões. O jogo só conversa com esta interface, então dá para
- * trocar o teclado (testes) pelo controle com Arduino sem mudar as telas.
+ * Fonte dos toques do jogador. O jogo só conversa com esta interface, então o teclado
+ * (para testes) e o controle com Arduino podem ser trocados sem mudar as telas.
  */
 public interface SensorIoT {
 
-    /** Atualiza a leitura. Chamado uma vez por quadro. */
-    void update(float delta);
+    /** Prepara o sensor (registra o teclado, procura a porta serial...). */
+    void iniciar();
+
+    /** Move para a lista os toques recebidos desde a última chamada. */
+    void consumirToques(List<Toque> destino);
 
     /**
-     * Toques recebidos desde a última chamada, em ordem. A lista é esvaziada a cada leitura,
-     * então cada toque é entregue uma única vez.
+     * Mostra o combo atual no dispositivo (no Arduino, quantos dos 4 LEDs ficam acesos).
+     * @param nivel de 0 (sem combo, multiplicador ×1) a 4 (combo máximo, ×5)
      */
-    List<Toque> lerToques();
+    default void mostrarCombo(int nivel) {
+    }
 
-    /** Nome do dispositivo, mostrado na tela (por exemplo "Teclado"). */
-    String nome();
+    /** Texto curto para a interface, por exemplo "Arduino conectado em COM5". */
+    String descricao();
 
-    /** Libera recursos (porta serial, threads). */
+    /** Verdadeiro se o dispositivo está pronto para uso. */
+    boolean conectado();
+
     default void dispose() {
     }
 }

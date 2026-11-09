@@ -4,7 +4,7 @@ import br.mackenzie.maestro.MaestroDoCaos;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3Application;
 import com.badlogic.gdx.backends.lwjgl3.Lwjgl3ApplicationConfiguration;
 
-/** Ponto de entrada da versão desktop. */
+/** Ponto de entrada da versão desktop. Procura o controle com Arduino nas portas USB. */
 public class Lwjgl3Launcher {
 
     public static void main(String[] args) {
@@ -13,6 +13,6 @@ public class Lwjgl3Launcher {
         config.setWindowedMode(1280, 720);
         config.useVsync(true);
         config.setForegroundFPS(60);
-        new Lwjgl3Application(new MaestroDoCaos(), config);
+        new Lwjgl3Application(new MaestroDoCaos(new SensorSerial()), config);
     }
 }

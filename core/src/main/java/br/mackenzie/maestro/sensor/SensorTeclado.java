@@ -2,50 +2,55 @@ package br.mackenzie.maestro.sensor;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.InputAdapter;
 import com.badlogic.gdx.utils.TimeUtils;
-import java.util.ArrayList;
+
 import java.util.List;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
- * Controle simulado pelo teclado, para testar sem o Arduino.
- * Seta esquerda ou A = botão esquerdo. Seta direita ou D = botão direito.
+ * Teclado no lugar do controle: seta esquerda ou A = botão esquerdo; seta direita ou D = botão direito.
+ * Usa o horário do evento de tecla, e não o do quadro, para a medição de tempo ficar precisa.
  */
-public class SensorTeclado implements SensorIoT {
+public class SensorTeclado extends InputAdapter implements SensorIoT {
 
-    /** Ignora um segundo toque do mesmo lado muito rápido (repique da tecla). */
-    private static final long INTERVALO_MINIMO_MS = 60;
-
-    private final List<Toque> pendentes = new ArrayList<>();
-    private final long[] ultimoToque = new long[Lado.values().length];
+    private final ConcurrentLinkedQueue<Toque> fila = new ConcurrentLinkedQueue<>();
 
     @Override
-    public void update(float delta) {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.LEFT) || Gdx.input.isKeyJustPressed(Input.Keys.A)) {
-            registrar(Lado.ESQUERDO);
-        }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.RIGHT) || Gdx.input.isKeyJustPressed(Input.Keys.D)) {
-            registrar(Lado.DIREITO);
-        }
-    }
-
-    private void registrar(Lado lado) {
-        long agora = TimeUtils.millis();
-        if (agora - ultimoToque[lado.ordinal()] < INTERVALO_MINIMO_MS) {
-            return;
-        }
-        ultimoToque[lado.ordinal()] = agora;
-        pendentes.add(new Toque(lado, agora));
+    public void iniciar() {
+        // registrado como InputProcessor pela classe principal do jogo
     }
 
     @Override
-    public List<Toque> lerToques() {
-        List<Toque> saida = new ArrayList<>(pendentes);
-        pendentes.clear();
-        return saida;
+    public boolean keyDown(int keycode) {
+        Lado lado = switch (keycode) {
+            case Input.Keys.LEFT, Input.Keys.A -> Lado.ESQUERDO;
+            case Input.Keys.RIGHT, Input.Keys.D -> Lado.DIREITO;
+            default -> null;
+        };
+        if (lado == null) {
+            return false;
+        }
+        long instante = Gdx.input.getCurrentEventTime();
+        fila.add(new Toque(lado, instante > 0 ? instante : TimeUtils.nanoTime()));
+        return true;
     }
 
     @Override
-    public String nome() {
-        return "Teclado (A / D ou setas)";
+    public void consumirToques(List<Toque> destino) {
+        Toque t;
+        while ((t = fila.poll()) != null) {
+            destino.add(t);
+        }
+    }
+
+    @Override
+    public String descricao() {
+        return "Teclado: ← / A e → / D";
+    }
+
+    @Override
+    public boolean conectado() {
+        return true;
     }
 }

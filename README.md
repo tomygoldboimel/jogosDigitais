@@ -6,139 +6,144 @@ Jogo sério para **reabilitação da reação motora**, desenvolvido em Java com
 
 Depois de um AVC, de um traumatismo craniano ou com o envelhecimento, muitas pessoas passam a reagir mais devagar aos estímulos e perdem a coordenação entre os dois lados do corpo. Isso aparece no dia a dia em tarefas simples, como atravessar a rua ou segurar um objeto que cai.
 
-O treino de reação costuma ser repetitivo e cansativo. O Maestro do Caos transforma esse treino em um jogo: o paciente recebe um estímulo visual e sonoro, responde com o botão certo no momento certo e acompanha a própria evolução a cada sessão.
+O treino de reação costuma ser repetitivo e cansativo. O Maestro do Caos transforma esse treino em um jogo: o paciente recebe um estímulo visual e sonoro, responde com o botão certo no momento certo, vê o combo crescer nos LEDs do controle e acompanha a própria evolução a cada sessão.
 
 ## Como funciona
 
-- Uma bolinha de referência gira em um círculo no centro da tela.
-- Quando ela chega ao alvo, o paciente deve pressionar o botão indicado. Os dois botões são usados **de forma alternada**, um de cada vez (esquerdo, direito, esquerdo, direito...).
-- Cada resposta é avaliada como **Perfeito**, **Bom**, **Cedo**, **Tarde** ou **Perdida**, e apertar o botão errado ou o mesmo botão duas vezes conta como erro.
-- As fases ficam mais difíceis aos poucos: a bolinha acelera, o ritmo muda e aparecem trechos de pausa em que o paciente precisa segurar a resposta.
-- O cenário reage ao desempenho: quando o paciente acerta, a lua brilha e as flores de lótus se abrem no lago; quando erra, a névoa escurece a cena.
+- Uma bolinha de referência vai e volta numa linha horizontal entre duas paredes, com velocidade constante e fácil de prever.
+- Quando ela **bate na parede esquerda**, o paciente aperta o **botão esquerdo**. Quando **bate na parede direita**, aperta o **botão direito**. Assim os dois botões são usados de forma alternada, sempre no ritmo da bolinha.
+- A parede para onde a bolinha vai acende na cor do botão esperado (**vermelho** para o esquerdo, **azul** para o direito, as mesmas cores dos botões do controle), e uma faixa junto da parede mostra a janela de acerto.
+- Cada resposta é avaliada como **Perfeito**, **Bom**, **Cedo**, **Tarde** ou **Perdeu a passagem**. Apertar o botão errado, apertar fora de hora ou apertar durante uma pausa conta como erro.
+- Cada passagem toca uma nota da música, mais grave no lado esquerdo e mais aguda no direito, que também ajuda a marcar o ritmo.
+- Erros e passagens perdidas gastam a **energia do vale**. Se ela acabar, a tentativa termina.
+- O cenário reage ao desempenho: quando o paciente acerta, a lua brilha, a aurora se acende e as flores de lótus se abrem no lago. Quando erra, a névoa escurece a cena.
 
 ## Fases
 
-Cada fase tem uma partitura com três tipos de trecho:
+| Fase | Andamento | Ritmo | O que treina |
+|---|---|---|---|
+| 1 · Prelúdio | Largo | 30 toques/min | Ritmo lento e constante |
+| 2 · Névoa | Andante | 36 toques/min | Constância e pausa controlada |
+| 3 · Aurora | Crescendo | 30 a 48 toques/min | Acelerar e desacelerar aos poucos |
+| 4 · Lua dourada | Rubato | 30 a 48 toques/min | Trocas rápidas de ritmo |
+| 5 · Noturno | Presto | 36 a 60 toques/min | Tudo junto e mais rápido |
 
-| Trecho | O que o paciente faz | O que treina |
-|---|---|---|
-| Ritmo | Aperta quando a bolinha chega ao alvo | Sincronia com um estímulo previsível |
-| Pausa | A bolinha continua girando, mas ele não deve apertar | Controle inibitório (segurar a resposta) |
-| Reflexo | A bolinha some e o alvo acende de surpresa | Tempo de reação a um estímulo imprevisível |
-
-| Fase | Nome | Partitura |
-|---|---|---|
-| 1 | Largo | Ritmo lento e constante (40 batidas por minuto), janela mais tolerante |
-| 2 | Andante | Ritmo a 48, pausa e ritmo a 54 |
-| 3 | Accelerando | O andamento acelera de 45 para 68 e depois desacelera |
-| 4 | Reflexo | Reflexo, ritmo a 55 e reflexo de novo, com esperas sorteadas |
-| 5 | Caos | Tudo junto, mais rápido e com janela 10% menor |
-
-As fases ficam em `logica/Fases.java`: dá para ajustar andamentos, quantidade de batidas e tolerância sem mexer no resto do código.
-
-## Avaliação de cada resposta
-
-O desvio é a diferença entre o toque e a chegada da bolinha ao alvo.
-
-| Resultado | Quando acontece | Pontos |
-|---|---|---|
-| Perfeito | Botão certo, até 90 ms de desvio | 100 |
-| Bom | Botão certo, até 200 ms de desvio | 60 |
-| Cedo / Tarde | Botão certo, mas com desvio maior (janela de 400 ms antes e 450 ms depois) | 20 |
-| Perdida | A janela fechou sem nenhum toque | 0 |
-| Botão errado | Apertou o lado errado (ou o mesmo lado duas vezes seguidas) | 0 |
-| Fora de hora | Apertou longe de qualquer estímulo | 0 |
-
-No **reflexo**, conta o tempo de reação desde o alvo acender: até 450 ms é Perfeito, até 700 ms é Bom e depois disso é Tarde. Sem toque em 1 segundo, a resposta é Perdida. Apertar antes de acender é Fora de hora.
-
-Na **pausa**, cada batida em que o paciente não aperta vale **Segurou** (50 pontos); apertar é Fora de hora.
-
-Acertos seguidos (Perfeito, Bom ou Segurou) formam um **combo**, que multiplica os pontos até 3 vezes. Qualquer outro resultado zera o combo.
+Cada fase é uma **partitura** com trechos de ritmo constante, trechos que aceleram ou desaceleram e **pausas**, em que a bolinha para no centro da linha e o paciente precisa segurar a resposta. O jogo avisa três segundos antes de cada mudança.
 
 ## Métricas de evolução
 
 | Métrica | O que mede |
 |---|---|
-| Precisão | Proporção de respostas Perfeito e Bom nos trechos de ritmo e reflexo |
-| Tempo de reação | Média, em milissegundos, entre o alvo acender e o toque, nos trechos de reflexo |
-| Erro de sincronia | Distância média entre o toque e a chegada da bolinha, nos trechos de ritmo |
-| Regularidade | Desvio padrão desses desvios: quanto menor, mais constante é o intervalo entre as respostas |
-| Erros de botão | Toques no botão errado, repetidos ou fora de hora |
-| Controle inibitório | Proporção das batidas de pausa em que o paciente conseguiu segurar a resposta |
-| Coordenação bilateral | Diferença de precisão entre o lado esquerdo e o direito, em pontos percentuais |
+| Precisão | Proporção ponderada de respostas Perfeito (vale 1) e Bom (vale 0,5) |
+| Tempo de reação médio | Diferença, em milissegundos, entre a batida da bolinha na parede (o estímulo) e o toque |
+| Tendência | Se o paciente costuma antecipar ou atrasar a resposta, e em quantos milissegundos |
+| Reação por lado | Tempo de reação médio do lado esquerdo e do lado direito, separados |
+| Coordenação bilateral | Quão parecidos são os dois lados (100% quando reagem igual) |
+| Regularidade | Estabilidade do intervalo entre as respostas em relação ao ritmo pedido |
+| Erros de botão e perdidas | Toques no botão errado, fora de hora ou na pausa, e passagens sem resposta |
 
-No fim de cada fase, a tela de resultado mostra essas métricas, compara com a tentativa anterior da mesma fase (melhorou, piorou ou igual), indica o lado que precisa de reforço e lista as últimas tentativas.
-
-Os resultados ficam salvos entre as sessões e também são gravados em `historico-maestro.csv`, na pasta onde o jogo foi aberto (com `./gradlew lwjgl3:run`, é a pasta `assets/`). O CSV pode ser aberto em uma planilha para montar os gráficos de evolução do short paper.
+Os resultados de cada tentativa ficam salvos no computador, e a tela de resultado mostra a evolução nas últimas tentativas da fase.
 
 ## Dispositivo IoT
 
-O controle é feito por um **Arduino** com **dois botões físicos** (estilo arcade, grandes e fáceis de pressionar). O Arduino registra o instante de cada toque e envia ao jogo pela porta serial, em linhas como:
+O controle é um **Arduino Uno** com **dois botões** e **quatro LEDs** montados na protoboard. O firmware está em `firmware/controle-maestro/` e funciona tanto na placa física quanto no Tinkercad.
 
-```
-B,E,123456   botão esquerdo pressionado no instante 123456 ms
-B,D,124210   botão direito pressionado no instante 124210 ms
-```
+### Ligação
 
-Usar o horário registrado pelo próprio Arduino deixa a medição do tempo de reação mais precisa, sem depender do atraso do USB.
+| Componente | Ligação |
+|---|---|
+| Botão azul (direito) | Entre 5V e o pino D2, com resistor de 10 kΩ do D2 para o GND |
+| Botão vermelho (esquerdo) | Entre 5V e o pino D3, com resistor de 10 kΩ do D3 para o GND |
+| LEDs | Pinos D7, D6, D5 e D4, da esquerda para a direita, cada um com resistor de 220 Ω para o GND |
 
-No código, o jogo conversa apenas com a interface `SensorIoT`. Assim, dá para testar com o teclado (`SensorTeclado`) e depois trocar pelo Arduino (`SensorSerial`) sem mudar as telas.
+O resistor de 10 kΩ (pull-down) mantém o pino em LOW enquanto o botão está solto. Ao apertar, o pino vai para HIGH.
 
-## Andamento do desenvolvimento
+### LEDs de combo
 
-- [x] Estrutura do projeto libGDX, menu e tela de jogo
-- [x] Dois botões alternados (teclado simulando o controle)
-- [x] Avaliação do toque (Perfeito, Bom, Cedo, Tarde, Perdida) e pontuação
-- [x] Partitura e 5 fases com dificuldade progressiva
-- [x] Métricas, tela de resultado e histórico de tentativas
-- [ ] Cenário, personagem e sons
-- [ ] Integração com o controle Arduino
+Os quatro LEDs mostram o **combo** do jogador. A cada 4 acertos seguidos acende mais um LED, da esquerda para a direita, e o multiplicador de pontos sobe (×2, ×3, ×4, ×5). Ao errar, os LEDs piscam duas vezes e apagam, e o combo volta para ×1. Assim o paciente recebe a resposta sobre a própria constância direto no controle que está segurando.
+
+Se os lados ficarem trocados, inverta `LADO` para `{'E', 'D'}` no início do firmware.
+
+### Protocolo serial (115200 baud, uma mensagem por linha)
+
+| Sentido | Mensagem | Significado |
+|---|---|---|
+| Arduino → jogo | `MAESTRO,1` | Enviada ao ligar. É assim que o jogo encontra o controle |
+| Arduino → jogo | `B,E,<ms>` / `B,D,<ms>` | Botão esquerdo ou direito pressionado no instante `<ms>` |
+| Jogo → Arduino | `C,0` a `C,4` | Quantos LEDs de combo ficam acesos (o Arduino pisca os LEDs quando o valor cai) |
+| Jogo → Arduino | `PING` | Teste de conexão (responde `PONG`) |
+
+O jogo procura o controle sozinho em todas as portas USB e volta a procurar se o cabo for desconectado. Sem controle, o teclado funciona no lugar dos botões.
 
 ## Como executar
 
-Pré-requisito: JDK 17 ou superior.
+1. Instale o **JDK 17 ou superior** (por exemplo, o Eclipse Temurin 17).
+2. Abra a pasta do projeto num terminal e rode:
 
 ```bash
-# rodar a versão desktop
-./gradlew lwjgl3:run
-
-# gerar o executável (.jar) em lwjgl3/build/libs/
-./gradlew lwjgl3:dist
-java -jar lwjgl3/build/libs/MaestroDoCaos-0.5.0.jar
+./gradlew lwjgl3:run        # Windows: gradlew.bat lwjgl3:run
 ```
 
-No Windows, use `gradlew.bat` no lugar de `./gradlew`.
+Na primeira vez o Gradle baixa o libGDX e as outras bibliotecas, então é preciso internet e pode levar alguns minutos.
+Também dá para abrir a pasta no IntelliJ IDEA como projeto Gradle e rodar a classe `Lwjgl3Launcher`.
+
+3. Para usar o controle, grave `firmware/controle-maestro/controle-maestro.ino` no Arduino pela Arduino IDE e deixe o cabo USB ligado.
+   **Feche o Monitor Serial da Arduino IDE antes de abrir o jogo**, senão a porta fica ocupada e o jogo não encontra o controle.
+   Sem o Arduino, o teclado funciona no lugar dos botões.
+
+Outros comandos:
+
+```bash
+./gradlew core:test         # testes automáticos das regras do jogo
+./gradlew lwjgl3:dist       # gera o executável em lwjgl3/build/libs/
+java -jar lwjgl3/build/libs/MaestroDoCaos-1.0.0.jar
+```
+
 No macOS, para rodar o `.jar` direto, adicione `-XstartOnFirstThread`: `java -XstartOnFirstThread -jar ...`
 
 ## Controles
 
-| Entrada | Ação |
-|---|---|
-| Botão esquerdo do Arduino (ou tecla ← / A) | Resposta do lado esquerdo |
-| Botão direito do Arduino (ou tecla → / D) | Resposta do lado direito |
-| Setas cima/baixo ou 1 a 5 | Escolher a fase (no menu) |
-| ENTER | Começar (no menu) ou ir para a próxima fase |
-| P | Pausar / continuar |
-| R | Reiniciar a fase |
-| M ou ESC | Voltar ao menu |
+O jogo inteiro pode ser usado só com os dois botões do controle.
+
+| Entrada | No menu | No jogo | No resultado |
+|---|---|---|---|
+| Botão vermelho, esquerdo (ou ← / A) | Troca a fase | Resposta do lado esquerdo | Volta ao menu |
+| Botão azul, direito (ou → / D) | Começa a fase | Resposta do lado direito | Próxima fase ou repetir |
+| 1 a 5 | Começa a fase escolhida | | |
+| ENTER | Começa | | Próxima fase ou repetir |
+| P ou ESC | | Pausa / continua | Menu |
+| R | | Reinicia a fase | Repete a fase |
+| M | | Volta ao menu | Volta ao menu |
+| N | | Liga / desliga o som | |
 
 ## Estrutura
 
 ```
-core/       lógica do jogo (independente de plataforma)
+core/                       lógica do jogo (independente de plataforma)
   br.mackenzie.maestro
-    MaestroDoCaos        classe principal (recursos compartilhados)
-    logica/              regras do jogo em Java puro: Regente (relógio e avaliação), Partitura,
-                         Trecho, Fases, Pontuacao, Metricas e Historico
-    screens/             telas: menu, jogo e resultado
-    sensor/              interface SensorIoT, Lado, Toque e implementações (teclado e Arduino)
-lwjgl3/     versão desktop (ponto de entrada)
-assets/     imagens, sons e fontes
+    MaestroDoCaos           classe principal (recursos compartilhados)
+    fases/                  partituras das cinco fases
+    jogo/                   regras (Partida), avaliação, métricas e histórico
+    sensor/                 interface SensorIoT, teclado e combinação de sensores
+    render/                 cenário, cores, fontes, sons e funções de desenho
+    telas/                  menu, jogo e resultado
+  src/test/                 testes automáticos das regras (JUnit 5)
+lwjgl3/                     versão desktop e leitura do Arduino (SensorSerial, jSerialComm)
+assets/                     imagem de fundo, fontes e sons
+firmware/                   código do Arduino
 ```
 
 ## Tecnologias
 
 - Java 17
-- libGDX 1.13.1 (backend LWJGL3)
+- libGDX 1.13.1 (backend LWJGL3 e extensão FreeType)
+- jSerialComm (comunicação serial com o Arduino)
+- JUnit 5
 - Gradle
-- Arduino (comunicação serial)
+- Arduino
+
+## Créditos dos recursos
+
+- Fontes DejaVu, licença livre (veja `assets/fontes/LICENCA-DejaVu.txt`).
+- Imagem de fundo gerada com o Gemini para o projeto.
+- Música ambiente e efeitos sonoros sintetizados para o projeto.
