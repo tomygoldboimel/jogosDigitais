@@ -9,7 +9,7 @@
  *
  * O que o controle faz:
  *   - Cada toque é enviado ao jogo pela USB como "B,E,<ms>" (esquerdo) ou "B,D,<ms>" (direito).
- *   - Os 4 LEDs mostram o combo: a cada 4 acertos seguidos acende mais um, da esquerda
+ *   - Os 4 LEDs mostram o combo: o jogo manda um nivel de 0 a 4 e acende essa quantidade, da esquerda
  *     para a direita. Com os 4 acesos o multiplicador de pontos está no máximo (×5).
  *   - Ao errar, o combo zera: os LEDs piscam duas vezes e apagam.
  *
