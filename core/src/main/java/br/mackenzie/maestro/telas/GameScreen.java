@@ -35,7 +35,9 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
 
     /** Linha da bolinha: paredes esquerda e direita, centro e altura das paredes. */
     private static final float CX = 640, CY = 360, PAREDE_E = 230, PAREDE_D = 1050;
-    private static final float ESPESSURA = 14, ALTURA_PAREDE = 140, RAIO_BOLA = 12;
+    private static final float ESPESSURA = 18, ALTURA_PAREDE = 140, RAIO_BOLA = 12;
+    /** Painel do bônus, no alto à direita. */
+    private static final float BONUS_X = 1012, BONUS_Y = 564, BONUS_L = 228, BONUS_A = 76;
     private static final float CONTAGEM = 3f;
     /** Notas da pentatônica de Ré (em semitons a partir do Lá 440): graves no esquerdo, agudas no direito. */
     private static final int[] NOTAS_ESQUERDO = {-7, -3, 0, 2};
@@ -57,13 +59,15 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
     private Color corBrilho = Cores.DOURADO;
     private Lado ladoBrilho;
     private int passagens;
+    private int comboMostrado = 1;
+    private float brilhoCombo;
     private Lado esperadoNoUltimoJulgamento;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout medidor = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
 
     public GameScreen(MaestroDoCaos jogo, Fase fase) {
         this.jogo = jogo;
         this.fase = fase;
-        this.cenario = new Cenario(jogo.recursos.fundo, 24);
+        this.cenario = new Cenario(jogo.recursos);
         reiniciar();
     }
 
@@ -73,6 +77,8 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         contagem = CONTAGEM;
         tempoNoFim = 0;
         brilhoAlvo = 0;
+        brilhoCombo = 0;
+        comboMostrado = 1;
         jogo.sensor.mostrarCombo(0);
         toques.clear();
         jogo.sensor.consumirToques(toques);   // descarta toques antigos
@@ -148,6 +154,11 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
 
     private void atualizar(float delta) {
         brilhoAlvo = Math.max(0, brilhoAlvo - delta * 3);
+        brilhoCombo = Math.max(0, brilhoCombo - delta * 1.6f);
+        if (partida.combo() > comboMostrado) {
+            brilhoCombo = 1;   // subiu de nível: o painel pisca
+        }
+        comboMostrado = partida.combo();
         toques.clear();
         jogo.sensor.consumirToques(toques);
         switch (estado) {
@@ -170,7 +181,7 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         }
         // LEDs do controle mostram o combo (o sensor só envia quando o valor muda)
         if (estado == Estado.JOGANDO) {
-            jogo.sensor.mostrarCombo(partida.combo() - 1);
+            jogo.sensor.mostrarCombo(Math.round(4f * (partida.combo() - 1) / (Partida.COMBO_MAXIMO - 1)));
         } else if (estado != Estado.PAUSADO) {
             jogo.sensor.mostrarCombo(0);
         }
@@ -224,8 +235,7 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         jogo.batch.begin();
         cenario.desenharFundo(jogo.batch, fase.tom, 0f);
         jogo.batch.end();
-        cenario.desenharEfeitos(jogo.shapes, estado == Estado.PAUSADO ? 0 : delta, harmonia,
-                (float) partida.florescimento());
+        cenario.desenharEfeitos(jogo.shapes, estado == Estado.PAUSADO ? 0 : delta, harmonia);
         Cenario.desenharFaixaCentral(jogo.shapes, PAREDE_E - 60, CY - ALTURA_PAREDE / 2 - 22,
                 PAREDE_D - PAREDE_E + 120, ALTURA_PAREDE + 44);
 
@@ -279,31 +289,27 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
                 float x = l == Lado.ESQUERDO ? PAREDE_E : PAREDE_D;
                 float dir = l == Lado.ESQUERDO ? 1 : -1;
                 s.setColor(c.r, c.g, c.b, 0.16f * forca);
-                s.rect(Math.min(x, x + dir * bom), CY - 9, bom, 18);
-                s.setColor(c.r, c.g, c.b, 0.40f * forca);
-                s.rect(Math.min(x, x + dir * perfeito), CY - 9, perfeito, 18);
+                Desenho.retanguloArredondado(s, Math.min(x, x + dir * bom), CY - 10, bom, 20, 10);
+                s.setColor(c.r, c.g, c.b, 0.42f * forca);
+                Desenho.retanguloArredondado(s, Math.min(x, x + dir * perfeito), CY - 10, perfeito, 20, 10);
             }
         }
 
         // paredes: a do próximo lado acende conforme a bolinha se aproxima
         for (Lado l : Lado.values()) {
-            Color c = corDoLado(l);
-            float aceso = l == proximo ? prox : 0;
-            float x = l == Lado.ESQUERDO ? PAREDE_E - ESPESSURA : PAREDE_D;
-            if (aceso > 0.02f) {
-                s.setColor(c.r, c.g, c.b, 0.18f * aceso);
-                s.rect(x - 10, CY - ALTURA_PAREDE / 2 - 10, ESPESSURA + 20, ALTURA_PAREDE + 20);
-            }
-            s.setColor(c.r, c.g, c.b, 0.35f + 0.65f * aceso);
-            s.rect(x, CY - ALTURA_PAREDE / 2, ESPESSURA, ALTURA_PAREDE);
+            desenharParede(s, l, l == proximo ? prox : 0);
         }
 
         // brilho de resposta na parede avaliada
         if (brilhoAlvo > 0 && ladoBrilho != null) {
-            float x = ladoBrilho == Lado.ESQUERDO ? PAREDE_E - ESPESSURA : PAREDE_D;
-            float cresce = (1 - brilhoAlvo) * 14;
-            s.setColor(corBrilho.r, corBrilho.g, corBrilho.b, 0.55f * brilhoAlvo);
-            s.rect(x - 6 - cresce, CY - ALTURA_PAREDE / 2 - 6 - cresce, ESPESSURA + 12 + 2 * cresce, ALTURA_PAREDE + 12 + 2 * cresce);
+            float x = paredeEsquerdaX(ladoBrilho);
+            float cresce = (1 - brilhoAlvo) * 16;
+            for (int i = 2; i >= 1; i--) {
+                float g = 5 + cresce + i * 4;
+                s.setColor(corBrilho.r, corBrilho.g, corBrilho.b, 0.22f * brilhoAlvo);
+                Desenho.retanguloArredondado(s, x - g, CY - ALTURA_PAREDE / 2 - g,
+                        ESPESSURA + 2 * g, ALTURA_PAREDE + 2 * g, ESPESSURA / 2 + g);
+            }
         }
 
         // pausa: barra com o tempo que falta
@@ -332,8 +338,9 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         s.setColor(Cores.BOLINHA.r, Cores.BOLINHA.g, Cores.BOLINHA.b, 1 - 0.6f * estacionada);
         s.circle(bx, CY, RAIO_BOLA - 3, 24);
 
-        // barras do topo: partitura e energia
+        // barras do topo: partitura, energia e o painel do bônus
         desenharPartitura(s);
+        desenharPainelDoBonus(s);
         s.setColor(0, 0, 0, 0.45f);
         s.rect(40, 590, 220, 8);
         float e = (float) partida.energia() / 100f;
@@ -341,6 +348,86 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         s.setColor(ce);
         s.rect(40, 590, 220 * e, 8);
         s.end();
+    }
+
+    /** Borda esquerda da parede do lado indicado. */
+    private static float paredeEsquerdaX(Lado l) {
+        return l == Lado.ESQUERDO ? PAREDE_E - ESPESSURA : PAREDE_D;
+    }
+
+    /**
+     * Parede em forma de cápsula: corpo escuro, miolo que sobe do centro conforme a bolinha
+     * se aproxima, núcleo claro e uma ponta apontando para o trilho, que marca o ponto exato da batida.
+     */
+    private void desenharParede(ShapeRenderer s, Lado l, float aceso) {
+        Color c = corDoLado(l);
+        boolean esquerda = l == Lado.ESQUERDO;
+        float x = paredeEsquerdaX(l);
+        float base = CY - ALTURA_PAREDE / 2;
+        float raio = ESPESSURA / 2;
+
+        // halo, cresce com a proximidade
+        for (int i = 3; i >= 1; i--) {
+            float g = 5f * i * (0.4f + 0.6f * aceso);
+            s.setColor(c.r, c.g, c.b, 0.03f + 0.07f * aceso);
+            Desenho.retanguloArredondado(s, x - g, base - g, ESPESSURA + 2 * g, ALTURA_PAREDE + 2 * g, raio + g);
+        }
+        // corpo apagado
+        s.setColor(c.r * 0.30f, c.g * 0.30f, c.b * 0.38f, 0.88f);
+        Desenho.retanguloArredondado(s, x, base, ESPESSURA, ALTURA_PAREDE, raio);
+        // miolo aceso, abre a partir do centro
+        float altura = ALTURA_PAREDE * (0.30f + 0.70f * aceso);
+        s.setColor(c.r, c.g, c.b, 0.60f + 0.40f * aceso);
+        Desenho.retanguloArredondado(s, x, CY - altura / 2, ESPESSURA, altura, raio);
+        // núcleo claro
+        float nucleo = Math.max(0, altura - 16);
+        if (nucleo > 0) {
+            s.setColor(1, 1, 1, 0.20f + 0.55f * aceso);
+            Desenho.retanguloArredondado(s, x + raio - 2.5f, CY - nucleo / 2, 5, nucleo, 2.5f);
+        }
+        // ponta na direção do trilho
+        float ponta = 8 + 4 * aceso;
+        float xi = esquerda ? x + ESPESSURA : x;
+        float dir = esquerda ? 1 : -1;
+        s.setColor(c.r, c.g, c.b, 0.55f + 0.45f * aceso);
+        s.triangle(xi, CY - ponta, xi, CY + ponta, xi + dir * ponta * 1.5f, CY);
+    }
+
+    /**
+     * Painel do bônus de sequência: multiplicador grande e a barra do que falta para o próximo nível.
+     * Fica no alto, à direita, no mesmo peso visual da energia do vale.
+     */
+    private void desenharPainelDoBonus(ShapeRenderer s) {
+        int mult = partida.combo();
+        float cheio = (float) ((mult - 1) / (double) (Partida.COMBO_MAXIMO - 1));
+        s.setColor(0.05f, 0.06f, 0.14f, 0.72f);
+        Desenho.retanguloArredondado(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 12);
+
+        // barra do progresso para o próximo nível
+        float bx = BONUS_X + 16, bl = BONUS_L - 32;
+        s.setColor(0, 0, 0, 0.45f);
+        Desenho.retanguloArredondado(s, bx, BONUS_Y + 14, bl, 8, 4);
+        Color c = mult >= Partida.COMBO_MAXIMO ? Cores.DOURADO : Cores.BOM;
+        s.setColor(c.r, c.g, c.b, 0.95f);
+        float preenchido = bl * (float) partida.progressoCombo();
+        if (preenchido > 1) {
+            Desenho.retanguloArredondado(s, bx, BONUS_Y + 14, preenchido, 8, 4);
+        }
+        // marcas dos níveis já conquistados
+        for (int i = 1; i < Partida.COMBO_MAXIMO; i++) {
+            float mx = bx + bl * i / (float) (Partida.COMBO_MAXIMO - 1);
+            s.setColor(1, 1, 1, i <= mult - 1 ? 0.55f : 0.18f);
+            s.rect(mx - 1, BONUS_Y + 12, 2, 12);
+        }
+        // moldura que pisca quando o multiplicador sobe
+        if (brilhoCombo > 0) {
+            float g = (1 - brilhoCombo) * 10;
+            s.setColor(Cores.DOURADO.r, Cores.DOURADO.g, Cores.DOURADO.b, 0.85f * brilhoCombo);
+            Desenho.bordaArredondada(s, BONUS_X - g, BONUS_Y - g, BONUS_L + 2 * g, BONUS_A + 2 * g, 12 + g, 3);
+        } else if (cheio > 0) {
+            s.setColor(Cores.DOURADO.r, Cores.DOURADO.g, Cores.DOURADO.b, 0.20f + 0.45f * cheio);
+            Desenho.bordaArredondada(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 12, 2);
+        }
     }
 
     private void desenharPartitura(ShapeRenderer s) {
@@ -384,7 +471,7 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         Desenho.texto(jogo.batch, r.pequena, "ENERGIA DO VALE", 40, 618, Cores.TEXTO);
         int resta = (int) Math.ceil(Math.max(0, fase.duracao - partida.tempo()));
         Desenho.textoDireita(jogo.batch, r.numeros, String.format("%d:%02d", resta / 60, resta % 60), 1240, 664, Cores.TEXTO);
-        Desenho.textoDireita(jogo.batch, r.texto, partida.pontos() + " pontos   ×" + partida.combo(), 1240, 626, Cores.DOURADO);
+        desenharTextosDoBonus(r);
 
         // nomes das paredes (os dois botões)
         textoParede(r, Lado.ESQUERDO, PAREDE_E - ESPESSURA / 2, "botão vermelho  ·  ← / A",
@@ -439,6 +526,19 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         Desenho.textoDireita(jogo.batch, r.pequena,
                 "P pausa · R reinicia · M menu · N som " + (jogo.somLigado ? "ligado" : "desligado"), 1240, 40, Cores.TEXTO_SUAVE);
         jogo.batch.end();
+    }
+
+    /** Textos do painel do bônus: rótulo, multiplicador grande, o que falta e os pontos. */
+    private void desenharTextosDoBonus(Recursos r) {
+        int mult = partida.combo();
+        boolean maximo = mult >= Partida.COMBO_MAXIMO;
+        Color cor = mult > 1 ? Cores.DOURADO : Cores.TEXTO_SUAVE;
+        Desenho.texto(jogo.batch, r.pequena, "BÔNUS DA FASE", BONUS_X + 16, BONUS_Y + BONUS_A - 10, Cores.TEXTO);
+        Desenho.textoDireita(jogo.batch, r.destaque, "×" + mult, BONUS_X + BONUS_L - 16, BONUS_Y + BONUS_A - 8, cor);
+        String detalhe = maximo ? "bônus máximo"
+                : partida.faltamParaSubir() + (partida.faltamParaSubir() == 1 ? " acerto para ×" : " acertos para ×") + (mult + 1);
+        Desenho.texto(jogo.batch, r.pequena, detalhe, BONUS_X + 16, BONUS_Y + 44, Cores.TEXTO_SUAVE);
+        Desenho.textoDireita(jogo.batch, r.numeros, partida.pontos() + " pontos", 1240, BONUS_Y - 10, Cores.DOURADO);
     }
 
     private void textoParede(Recursos r, Lado lado, float cx, String detalhe, float aceso) {

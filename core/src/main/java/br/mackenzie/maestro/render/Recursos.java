@@ -11,6 +11,9 @@ import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator.FreeTypeFont
 /** Fontes, imagens e sons carregados uma vez e compartilhados entre as telas. */
 public final class Recursos {
 
+    /** Mesmo arquivo de preferências usado pelo histórico. */
+    private static final String PREFERENCIAS = "maestro-do-caos";
+
     private static final String CARACTERES = FreeTypeFontGenerator.DEFAULT_CHARS
             + "áàâãäéèêëíìîïóòôõöúùûüçñÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇÑ←→↑↓★☆·°";
 
@@ -21,7 +24,8 @@ public final class Recursos {
     public BitmapFont numeros;     // monoespaçada
     public BitmapFont estrelas;    // ★ e ☆ grandes (a fonte serifada não tem esses símbolos)
 
-    public Texture fundo;
+    private final Texture[] fundos = new Texture[Fundos.TODOS.size()];
+    private int fundoEscolhido;
 
     public Music musica;
     public Sound nota;
@@ -36,8 +40,7 @@ public final class Recursos {
         numeros = gerar("fontes/DejaVuSansMono-Bold.ttf", 26);
         estrelas = gerar("fontes/DejaVuSans.ttf", 56, "★☆");
 
-        fundo = new Texture(Gdx.files.internal("imagens/fundoMontanhas.jpg"));
-        fundo.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+        fundoEscolhido = Fundos.indiceValido(Gdx.app.getPreferences(PREFERENCIAS).getInteger("fundo", 0));
 
         musica = Gdx.audio.newMusic(Gdx.files.internal("sons/musica-ambiente.ogg"));
         musica.setLooping(true);
@@ -45,6 +48,31 @@ public final class Recursos {
         nota = Gdx.audio.newSound(Gdx.files.internal("sons/nota.wav"));
         erro = Gdx.audio.newSound(Gdx.files.internal("sons/erro.wav"));
         concluido = Gdx.audio.newSound(Gdx.files.internal("sons/concluido.wav"));
+    }
+
+    /** Qual cenário está escolhido. */
+    public Fundos.Fundo fundoAtual() {
+        return Fundos.TODOS.get(fundoEscolhido);
+    }
+
+    public int indiceFundo() {
+        return fundoEscolhido;
+    }
+
+    /** Troca o cenário e guarda a escolha para a próxima vez que o jogo abrir. */
+    public void escolherFundo(int indice) {
+        fundoEscolhido = Fundos.indiceValido(indice);
+        Gdx.app.getPreferences(PREFERENCIAS).putInteger("fundo", fundoEscolhido).flush();
+    }
+
+    /** Textura do cenário escolhido, carregada na primeira vez que é pedida. */
+    public Texture fundo() {
+        if (fundos[fundoEscolhido] == null) {
+            Texture t = new Texture(Gdx.files.internal(fundoAtual().arquivo));
+            t.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+            fundos[fundoEscolhido] = t;
+        }
+        return fundos[fundoEscolhido];
     }
 
     private BitmapFont gerar(String arquivo, int tamanho) {
@@ -73,7 +101,11 @@ public final class Recursos {
         pequena.dispose();
         numeros.dispose();
         estrelas.dispose();
-        fundo.dispose();
+        for (Texture t : fundos) {
+            if (t != null) {
+                t.dispose();
+            }
+        }
         musica.dispose();
         nota.dispose();
         erro.dispose();

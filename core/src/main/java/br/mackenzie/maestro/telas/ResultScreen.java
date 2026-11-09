@@ -18,21 +18,15 @@ import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
 import com.badlogic.gdx.utils.viewport.Viewport;
 
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 
-/** Resultado da tentativa: métricas de evolução e histórico da fase. */
+/** Resultado da tentativa: precisão, regularidade e pontos. */
 public class ResultScreen extends ScreenAdapter {
-
-    private static final DateTimeFormatter DATA = DateTimeFormatter.ofPattern("dd/MM HH:mm").withZone(ZoneId.systemDefault());
 
     private final MaestroDoCaos jogo;
     private final Fase fase;
     private final Resultado r;
-    private final List<Resultado> historico;
     private final Viewport viewport = new FitViewport(MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA);
     private final Cenario cenario;
     private final List<Toque> toques = new ArrayList<>();
@@ -43,8 +37,7 @@ public class ResultScreen extends ScreenAdapter {
         this.jogo = jogo;
         this.fase = fase;
         this.r = resultado;
-        this.historico = jogo.historico.tentativas(fase.numero);
-        this.cenario = new Cenario(jogo.recursos.fundo, 18);
+        this.cenario = new Cenario(jogo.recursos);
         this.temProxima = !resultado.falhou() && resultado.estrelas() > 0 && fase.numero < Fases.TODAS.size();
     }
 
@@ -64,94 +57,52 @@ public class ResultScreen extends ScreenAdapter {
         cenario.desenharFundo(jogo.batch, fase.tom, 0.2f);
         jogo.batch.end();
         float qualidade = r.precisao() < 0 ? 0.2f : (float) r.precisao();
-        cenario.desenharEfeitos(jogo.shapes, delta, qualidade, qualidade);
+        cenario.desenharEfeitos(jogo.shapes, delta, qualidade);
 
         ShapeRenderer s = jogo.shapes;
         Desenho.transparencia();
         s.begin(ShapeRenderer.ShapeType.Filled);
         s.setColor(0.05f, 0.06f, 0.13f, 0.86f);
-        Desenho.retanguloArredondado(s, 80, 40, 1120, 640, 18);
-        for (int i = 0; i < 9; i++) {
-            float x = 120 + (i % 3) * 260, y = 400 - (i / 3) * 92;
+        Desenho.retanguloArredondado(s, 240, 208, 800, 332, 18);
+        for (int i = 0; i < 3; i++) {
+            float x = 276 + i * 248, y = 232;
             s.setColor(0.10f, 0.11f, 0.22f, 0.95f);
-            Desenho.retanguloArredondado(s, x, y, 245, 80, 10);
+            Desenho.retanguloArredondado(s, x, y, 232, 96, 10);
         }
-        s.setColor(0.10f, 0.11f, 0.22f, 0.95f);
-        Desenho.retanguloArredondado(s, 920, 216, 240, 264, 10);
         s.end();
 
         jogo.batch.begin();
         Desenho.texto(jogo.batch, f.pequena,
-                ("FASE " + fase.numero + " · " + fase.nome + " · " + fase.andamento).toUpperCase(), 120, 650, Cores.TEXTO_SUAVE);
-        String titulo = r.falhou() ? "A energia do vale acabou" : r.estrelas() > 0 ? "Fase concluída" : "Quase lá";
-        Desenho.texto(jogo.batch, f.titulo, titulo, 116, 626, Cores.DOURADO);
-        Desenho.textoDireita(jogo.batch, f.estrelas, "★".repeat(r.estrelas()) + "☆".repeat(3 - r.estrelas()), 1160, 614, Cores.DOURADO);
+                ("FASE " + fase.numero + " \u00b7 " + fase.nome + " \u00b7 " + fase.andamento).toUpperCase(), 280, 508, Cores.TEXTO_SUAVE);
+        String titulo = r.falhou() ? "A energia do vale acabou" : r.estrelas() > 0 ? "Fase conclu\u00edda" : "Quase l\u00e1";
+        // fonte media: com a grande, um titulo longo passa da borda do painel e por cima das estrelas
+        Desenho.texto(jogo.batch, f.destaque, titulo, 278, 484, Cores.DOURADO);
+        Desenho.textoDireita(jogo.batch, f.estrelas, "\u2605".repeat(r.estrelas()) + "\u2606".repeat(3 - r.estrelas()), 1004, 496, Cores.DOURADO);
         String msg = r.falhou()
-                ? "A energia cai com botões errados e passagens perdidas. Tente de novo com calma: o ritmo vem com a prática."
-                : r.estrelas() > 0 ? "Boa execução. A próxima fase traz uma partitura mais exigente."
+                ? "A energia cai com bot\u00f5es errados e passagens perdidas. Tente de novo com calma: o ritmo vem com a pr\u00e1tica."
+                : r.estrelas() > 0 ? "Boa execu\u00e7\u00e3o. A pr\u00f3xima fase traz uma partitura mais exigente."
                 : "Para ganhar estrelas, acerte ao menos metade das passagens com Perfeito ou Bom.";
-        Desenho.paragrafo(jogo.batch, f.texto, msg, 120, 545, 1040, Cores.TEXTO);
+        Desenho.paragrafo(jogo.batch, f.texto, msg, 280, 418, 620, Cores.TEXTO);
 
-        metrica(0, "Precisão", pct(r.precisao()));
-        metrica(1, "Tempo de reação médio", ms(r.reacaoMediaMs()));
-        metrica(2, "Tendência", tendencia(r.tendenciaMs()));
-        metrica(3, "Reação lado esquerdo", ms(r.reacaoEsquerdaMs()));
-        metrica(4, "Reação lado direito", ms(r.reacaoDireitaMs()));
-        metrica(5, "Coordenação bilateral", pct(r.coordenacaoBilateral()));
-        metrica(6, "Regularidade", pct(r.regularidade()));
-        metrica(7, "Erros / perdidas", r.errosDeBotao() + " / " + r.perdidas());
-        metrica(8, r.reacaoControleMs() >= 0 ? "Reação medida no controle" : "Pontos",
-                r.reacaoControleMs() >= 0 ? ms(r.reacaoControleMs()) : String.valueOf(r.pontos()));
+        metrica(0, "Precis\u00e3o", pct(r.precisao()));
+        metrica(1, "Regularidade", pct(r.regularidade()));
+        metrica(2, "Pontos", String.valueOf(r.pontos()));
 
-        // histórico da fase
-        Desenho.texto(jogo.batch, f.pequena, "EVOLUÇÃO NESTA FASE", 940, 468, Cores.TEXTO_SUAVE);
-        int inicio = Math.max(0, historico.size() - 5);
-        float y = 438;
-        for (int i = inicio; i < historico.size(); i++) {
-            Resultado h = historico.get(i);
-            String linha = DATA.format(Instant.ofEpochMilli(h.instante())) + "   " + pct(h.precisao());
-            if (i > 0) {
-                Resultado ant = historico.get(i - 1);
-                if (h.precisao() >= 0 && ant.precisao() >= 0) {
-                    long dif = Math.round((h.precisao() - ant.precisao()) * 100);
-                    linha += dif >= 0 ? "  ↑" + dif : "  ↓" + (-dif);
-                }
-            }
-            boolean atual = i == historico.size() - 1;
-            Desenho.texto(jogo.batch, f.pequena, linha, 940, y, atual ? Cores.DOURADO : Cores.TEXTO);
-            Desenho.texto(jogo.batch, f.pequena, "   reação " + ms(h.reacaoMediaMs()), 940, y - 20, Cores.TEXTO_SUAVE);
-            y -= 40;
-        }
-
-        String continuar = temProxima ? "próxima fase" : "repetir a fase";
+        String continuar = temProxima ? "pr\u00f3xima fase" : "repetir a fase";
         Desenho.textoCentro(jogo.batch, f.texto,
-                "Botão direito (→ / ENTER): " + continuar + "     Botão esquerdo (← / M): menu     R: repetir",
-                640, 165, Cores.TEXTO);
-        Desenho.textoCentro(jogo.batch, f.pequena,
-                r.perfeitos() + " perfeitos · " + r.bons() + " bons · " + r.cedoOuTarde() + " cedo ou tarde · "
-                        + r.pontos() + " pontos", 640, 128, Cores.TEXTO_SUAVE);
+                "Bot\u00e3o direito (\u2192 / ENTER): " + continuar + "     Bot\u00e3o esquerdo (\u2190 / M): menu     R: repetir",
+                640, 148, Cores.TEXTO);
         jogo.batch.end();
     }
 
     private void metrica(int i, String nome, String valor) {
-        float x = 120 + (i % 3) * 260, y = 400 - (i / 3) * 92;
-        Desenho.texto(jogo.batch, jogo.recursos.pequena, nome.toUpperCase(), x + 14, y + 66, Cores.TEXTO_SUAVE);
-        Desenho.texto(jogo.batch, jogo.recursos.numeros, valor, x + 14, y + 38, Cores.TEXTO);
+        float x = 276 + i * 248, y = 232;
+        Desenho.texto(jogo.batch, jogo.recursos.pequena, nome.toUpperCase(), x + 18, y + 78, Cores.TEXTO_SUAVE);
+        Desenho.texto(jogo.batch, jogo.recursos.numeros, valor, x + 18, y + 44, Cores.TEXTO);
     }
 
     private static String pct(double v) {
         return v < 0 ? "-" : Math.round(v * 100) + "%";
-    }
-
-    private static String ms(double v) {
-        return v < 0 ? "-" : Math.round(v) + " ms";
-    }
-
-    private static String tendencia(double v) {
-        if (Math.abs(v) < 15) {
-            return "no tempo";
-        }
-        return (v < 0 ? "antecipa " : "atrasa ") + Math.round(Math.abs(v)) + " ms";
     }
 
     /** Retorna true se trocou de tela. */

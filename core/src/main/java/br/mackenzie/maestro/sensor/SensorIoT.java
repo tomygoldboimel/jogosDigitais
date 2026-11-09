@@ -16,7 +16,7 @@ public interface SensorIoT {
 
     /**
      * Mostra o combo atual no dispositivo (no Arduino, quantos dos 4 LEDs ficam acesos).
-     * @param nivel de 0 (sem combo, multiplicador ×1) a 4 (combo máximo, ×5)
+     * @param nivel de 0 (sem combo) a 4 (bônus máximo), proporcional ao multiplicador da partida
      */
     default void mostrarCombo(int nivel) {
     }

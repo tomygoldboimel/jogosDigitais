@@ -62,6 +62,11 @@ public final class Partida {
     private double harmonia = 0.5;
     private double harmoniaSuave = 0.5;
     private int sequencia;
+    /** Multiplicador maximo do bonus de sequencia. */
+    public static final int COMBO_MAXIMO = 8;
+    /** Acertos seguidos para subir um nivel de bonus. */
+    public static final int ACERTOS_POR_NIVEL = 3;
+
     private long pontos;
 
     private Julgamento ultimoJulgamento;
@@ -312,7 +317,23 @@ public final class Partida {
     }
 
     public int combo() {
-        return 1 + Math.min(4, sequencia / 4);
+        return 1 + Math.min(COMBO_MAXIMO - 1, sequencia / ACERTOS_POR_NIVEL);
+    }
+
+    /** Quanto falta para o proximo nivel de bonus, de 0 a 1. Fica em 1 quando ja esta no maximo. */
+    public double progressoCombo() {
+        if (combo() >= COMBO_MAXIMO) {
+            return 1;
+        }
+        return (sequencia % ACERTOS_POR_NIVEL) / (double) ACERTOS_POR_NIVEL;
+    }
+
+    /** Acertos seguidos que faltam para subir de nivel. Zero quando ja esta no maximo. */
+    public int faltamParaSubir() {
+        if (combo() >= COMBO_MAXIMO) {
+            return 0;
+        }
+        return ACERTOS_POR_NIVEL - sequencia % ACERTOS_POR_NIVEL;
     }
 
     public long pontos() {
@@ -323,7 +344,7 @@ public final class Partida {
         return metricas;
     }
 
-    /** Proporção de acertos sobre as passagens da fase inteira (faz as flores de lótus abrirem). */
+    /** Proporção de acertos sobre as passagens da fase inteira. */
     public double florescimento() {
         return Math.min(1, metricas.acertos() / fase.passagensEstimadas());
     }
