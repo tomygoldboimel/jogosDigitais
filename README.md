@@ -46,7 +46,7 @@ Cada fase é uma **partitura** com trechos de ritmo constante, trechos que acele
 
 ## Cenários
 
-O jogo vem com cinco imagens de fundo: **Noite**, **Crepúsculo**, **Entardecer**, **Amanhecer** e **Dia**.
+O jogo vem com cinco imagens de fundo: **Noite**, **Crepúsculo**, **Entardecer**, **Amanhecer**, **Dia** e **Neve** .
 
 A escolha é o **último cartão do menu**, depois das cinco fases. Com ele selecionado, o botão direito deixa de significar "começar" e passa a trocar a imagem, que muda na hora na tela inteira. O cartão mostra uma miniatura, o nome e a posição na lista. A escolha fica guardada nas preferências do jogo e vale para as próximas sessões.
 
