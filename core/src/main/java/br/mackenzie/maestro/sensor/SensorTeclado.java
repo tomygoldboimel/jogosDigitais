@@ -46,7 +46,7 @@ public class SensorTeclado extends InputAdapter implements SensorIoT {
 
     @Override
     public String descricao() {
-        return "Teclado: ← / A e → / D";
+        return "Teclado";
     }
 
     @Override

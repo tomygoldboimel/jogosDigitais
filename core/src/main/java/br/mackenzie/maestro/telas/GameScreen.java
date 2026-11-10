@@ -10,6 +10,7 @@ import br.mackenzie.maestro.jogo.Resultado;
 import br.mackenzie.maestro.render.Cenario;
 import br.mackenzie.maestro.render.Cores;
 import br.mackenzie.maestro.render.Desenho;
+import br.mackenzie.maestro.render.Particulas;
 import br.mackenzie.maestro.render.Recursos;
 import br.mackenzie.maestro.sensor.Lado;
 import br.mackenzie.maestro.sensor.Toque;
@@ -30,18 +31,27 @@ import java.util.List;
 /**
  * Tela de jogo. A bolinha vai e volta numa linha entre duas paredes, no ritmo da fase.
  * Quando ela bate na parede esquerda, o jogador aperta o botão esquerdo; na direita, o direito.
+ *
+ * Os textos que mudam pouco (relógio, rodapé, avisos, painel do bônus) são montados só quando o
+ * valor muda, e não a cada quadro: um jogo de reação não pode dar pausas do coletor de lixo
+ * justamente na hora em que o tempo de resposta está sendo medido.
  */
 public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
 
     /** Linha da bolinha: paredes esquerda e direita, centro e altura das paredes. */
     private static final float CX = 640, CY = 360, PAREDE_E = 230, PAREDE_D = 1050;
     private static final float ESPESSURA = 18, ALTURA_PAREDE = 140, RAIO_BOLA = 12;
-    /** Painel do bônus, no alto à direita. */
-    private static final float BONUS_X = 1012, BONUS_Y = 564, BONUS_L = 228, BONUS_A = 76;
+    /** Painel do bônus de sequência, no alto à direita: o maior painel da tela. */
+    private static final float BONUS_X = 976, BONUS_Y = 470, BONUS_L = 264, BONUS_A = 166;
     private static final float CONTAGEM = 3f;
     /** Notas da pentatônica de Ré (em semitons a partir do Lá 440): graves no esquerdo, agudas no direito. */
     private static final int[] NOTAS_ESQUERDO = {-7, -3, 0, 2};
     private static final int[] NOTAS_DIREITO = {5, 7, 9, 12};
+    /**
+     * Legenda do número do ritmo. O lado da vez não é mais escrito aqui: a parede que acende,
+     * a cor da bolinha e o nome grande do lado já dizem isso, e repetir em texto só pesava a tela.
+     */
+    private static final String UNIDADE_DO_RITMO = "TOQUES POR MINUTO";
 
     private enum Estado { CONTAGEM, JOGANDO, PAUSADO, FIM }
 
@@ -50,6 +60,11 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
     private final Viewport viewport = new FitViewport(MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA);
     private final Cenario cenario;
     private final List<Toque> toques = new ArrayList<>();
+    private final Particulas particulas = new Particulas();
+    /** Rótulos da partitura, montados uma vez: antes eram refeitos a cada quadro, um por segmento. */
+    private final String[] rotulos;
+    /** "Fase 2 · Vale sereno", montado uma vez. */
+    private final String cabecalho;
 
     private Partida partida;
     private Estado estado;
@@ -64,10 +79,46 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
     private Lado esperadoNoUltimoJulgamento;
     private final com.badlogic.gdx.graphics.g2d.GlyphLayout medidor = new com.badlogic.gdx.graphics.g2d.GlyphLayout();
 
+    // --- efeitos de resposta ---
+    /** Pulsa a cada batida da bolinha na parede: dá a pulsação do ritmo à cena. */
+    private float pulsoBatida;
+    /** Onda que se abre na parede onde a bolinha acabou de bater. */
+    private float anelPassagem;
+    private Lado ladoPassagem;
+    /** Brilho curto no momento em que a janela de acerto abre, como estímulo de antecipação. */
+    private float avisoJanela;
+    private Lado ladoJanela;
+    /** Clarão dourado no Perfeito e brilho vermelho nas bordas no erro. */
+    private float flashPerfeito, flashErro;
+
+    // --- textos guardados entre quadros ---
+    private int relogioSegundos = -1;
+    private String relogioTexto = "0:00";
+    private int rodapePrecisao = -2, rodapeReacao = -2, rodapeAcertos = -1;
+    private String rodapeTexto = "";
+    private final StringBuilder construtor = new StringBuilder(96);
+    private int bonusChave = -1;
+    private String bonusMultiplicador = "×1", bonusDetalhe = "";
+    private long avisoChave = -1;
+    private String avisoTexto;
+    private String julgamentoTexto = "";
+    private int ritmoMostrado = -1;
+    private String ritmoTexto = "";
+    private long pontosMostrados = -1;
+    private String pontosTexto = "0 pontos";
+    private String descricaoSensor = "", descricaoTexto = "";
+    /** Tempo de tela, usado só nas animações (não para a lógica da partida). */
+    private float tempoTela;
+
     public GameScreen(MaestroDoCaos jogo, Fase fase) {
         this.jogo = jogo;
         this.fase = fase;
         this.cenario = new Cenario(jogo.recursos);
+        this.rotulos = new String[fase.segmentos.size()];
+        for (int i = 0; i < rotulos.length; i++) {
+            rotulos[i] = fase.segmentos.get(i).rotulo();
+        }
+        this.cabecalho = "Fase " + fase.numero + " · " + fase.nome;
         reiniciar();
     }
 
@@ -79,6 +130,14 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         brilhoAlvo = 0;
         brilhoCombo = 0;
         comboMostrado = 1;
+        pulsoBatida = 0;
+        anelPassagem = 0;
+        avisoJanela = 0;
+        flashPerfeito = 0;
+        flashErro = 0;
+        ladoPassagem = null;
+        ladoJanela = null;
+        particulas.limpar();
         jogo.sensor.mostrarCombo(0);
         toques.clear();
         jogo.sensor.consumirToques(toques);   // descarta toques antigos
@@ -159,6 +218,16 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
             brilhoCombo = 1;   // subiu de nível: o painel pisca
         }
         comboMostrado = partida.combo();
+
+        float dtEfeitos = estado == Estado.PAUSADO ? 0 : delta;
+        tempoTela += dtEfeitos;
+        pulsoBatida = Math.max(0, pulsoBatida - dtEfeitos * 3.4f);
+        anelPassagem = Math.max(0, anelPassagem - dtEfeitos * 2.6f);
+        avisoJanela = Math.max(0, avisoJanela - dtEfeitos * 4.5f);
+        flashPerfeito = Math.max(0, flashPerfeito - dtEfeitos * 3.6f);
+        flashErro = Math.max(0, flashErro - dtEfeitos * 2.2f);
+        particulas.atualizar(dtEfeitos);
+
         toques.clear();
         jogo.sensor.consumirToques(toques);
         switch (estado) {
@@ -192,6 +261,9 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
     @Override
     public void passagem(int indice, Lado lado, boolean valendo) {
         passagens++;
+        pulsoBatida = 1;
+        anelPassagem = 1;
+        ladoPassagem = lado;
         if (!jogo.somLigado) {
             return;
         }
@@ -201,14 +273,35 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         jogo.recursos.nota.play(valendo ? 0.55f : 0.35f, pitch, lado == Lado.ESQUERDO ? -0.6f : 0.6f);
     }
 
+    /** A janela de acerto abriu: a parede daquele lado dá um brilho, como aviso de "é agora". */
+    @Override
+    public void janelaAberta(Lado lado) {
+        avisoJanela = 1;
+        ladoJanela = lado;
+    }
+
     @Override
     public void julgado(Julgamento j, Lado esperado, Lado apertado, double desvioMs) {
         esperadoNoUltimoJulgamento = esperado;
         ladoBrilho = esperado != null ? esperado : apertado;
         brilhoAlvo = 1;
+        julgamentoTexto = montarTextoDoJulgamento(j, desvioMs);
         corBrilho = j == Julgamento.PERFEITO ? Cores.DOURADO
                 : j.acerto ? Cores.BOM
                 : j.erro() ? Cores.ERRO : Cores.TEXTO;
+        if (j == Julgamento.PERFEITO) {
+            flashPerfeito = 1;
+        }
+        if (j.erro()) {
+            flashErro = 1;
+        }
+        // faíscas saindo da parede avaliada em direção ao trilho
+        if (ladoBrilho != null) {
+            boolean esquerda = ladoBrilho == Lado.ESQUERDO;
+            int quantidade = j == Julgamento.PERFEITO ? 24 : j.acerto ? 13 : 8;
+            float forca = j == Julgamento.PERFEITO ? 330f : j.acerto ? 230f : 150f;
+            particulas.emitir(esquerda ? PAREDE_E : PAREDE_D, CY, quantidade, corBrilho, forca, esquerda ? 1 : -1);
+        }
         if (j.erro() && jogo.somLigado) {
             jogo.recursos.erro.play(0.5f);
         }
@@ -236,10 +329,15 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
         cenario.desenharFundo(jogo.batch, fase.tom, 0f);
         jogo.batch.end();
         cenario.desenharEfeitos(jogo.shapes, estado == Estado.PAUSADO ? 0 : delta, harmonia);
-        Cenario.desenharFaixaCentral(jogo.shapes, PAREDE_E - 60, CY - ALTURA_PAREDE / 2 - 22,
-                PAREDE_D - PAREDE_E + 120, ALTURA_PAREDE + 44);
+        Cenario.desenharFaixasDeLeitura(jogo.shapes);
+        // a faixa desce até abaixo dos nomes das paredes, senão ESQUERDO e DIREITO ficam
+        // soltos em cima da parte clara da imagem e quase somem
+        Cenario.desenharFaixaCentral(jogo.shapes, PAREDE_E - 120, CY - ALTURA_PAREDE / 2 - 60,
+                PAREDE_D - PAREDE_E + 240, ALTURA_PAREDE + 82, pulsoBatida);
 
         desenharFormas();
+        particulas.desenhar(jogo.shapes);
+        desenharFlashes();
         desenharTextos();
         if (estado == Estado.PAUSADO) {
             desenharPausa();
@@ -286,7 +384,7 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
             for (Lado l : Lado.values()) {
                 Color c = corDoLado(l);
                 float forca = l == proximo ? 1f : 0.35f;
-                float x = l == Lado.ESQUERDO ? PAREDE_E : PAREDE_D;
+                float x = paredeX(l);
                 float dir = l == Lado.ESQUERDO ? 1 : -1;
                 s.setColor(c.r, c.g, c.b, 0.16f * forca);
                 Desenho.retanguloArredondado(s, Math.min(x, x + dir * bom), CY - 10, bom, 20, 10);
@@ -297,7 +395,19 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
 
         // paredes: a do próximo lado acende conforme a bolinha se aproxima
         for (Lado l : Lado.values()) {
-            desenharParede(s, l, l == proximo ? prox : 0);
+            float aceso = l == proximo ? prox : 0;
+            if (l == ladoJanela) {
+                aceso = Math.min(1f, aceso + 0.22f * avisoJanela);
+            }
+            desenharParede(s, l, aceso);
+        }
+
+        // onda que se abre na parede a cada batida da bolinha
+        if (anelPassagem > 0.01f && ladoPassagem != null) {
+            Color c = corDoLado(ladoPassagem);
+            float raio = 16 + (1 - anelPassagem) * 78;
+            s.setColor(c.r, c.g, c.b, 0.30f * anelPassagem * anelPassagem);
+            Desenho.circunferencia(s, paredeX(ladoPassagem), CY, raio, 2.5f, 32);
         }
 
         // brilho de resposta na parede avaliada
@@ -328,26 +438,48 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
             for (int j = 10; j >= 1; j--) {
                 float tx = meio + (float) posicaoNaLinha(f - j * 0.012) * (percurso / 2);
                 s.setColor(cBola.r, cBola.g, cBola.b, 0.16f * (1 - j / 11f));
-                s.circle(tx, CY, RAIO_BOLA - 3 - j * 0.5f, 16);
+                s.circle(tx, CY, RAIO_BOLA - 3 - j * 0.5f, 12);
             }
         }
+        // halo que se abre na batida, para a pulsação do ritmo aparecer na própria bolinha
+        float halo = (RAIO_BOLA + 8) * (1 + 0.45f * pulsoBatida);
         s.setColor(cBola.r, cBola.g, cBola.b, 0.35f * (1 - estacionada));
-        s.circle(bx, CY, RAIO_BOLA + 8, 24);
+        s.circle(bx, CY, halo, 24);
         s.setColor(cBola);
         s.circle(bx, CY, RAIO_BOLA, 24);
         s.setColor(Cores.BOLINHA.r, Cores.BOLINHA.g, Cores.BOLINHA.b, 1 - 0.6f * estacionada);
         s.circle(bx, CY, RAIO_BOLA - 3, 24);
 
         // barras do topo: partitura, energia e o painel do bônus
+        desenharPlacas(s);
         desenharPartitura(s);
         desenharPainelDoBonus(s);
-        s.setColor(0, 0, 0, 0.45f);
-        s.rect(40, 590, 220, 8);
+        desenharEnergia(s);
+        s.end();
+    }
+
+    /**
+     * Placa escura atrás do cabeçalho. O texto antes ficava direto sobre a imagem e sumia
+     * nos cenários claros; com a placa ele tem sempre o mesmo contraste, em qualquer fundo.
+     */
+    private void desenharPlacas(ShapeRenderer s) {
+        s.setColor(0.04f, 0.05f, 0.12f, 0.70f);
+        Desenho.retanguloArredondado(s, 32, 566, 430, 106, 14);
+        Desenho.retanguloArredondado(s, 32, 20, 450, 64, 12);
+    }
+
+    /** Barra da energia do vale, com o fim arredondado e um aviso piscando quando está baixa. */
+    private void desenharEnergia(ShapeRenderer s) {
+        float x = 40, y = 588, largura = 220, altura = 10;
+        s.setColor(0, 0, 0, 0.5f);
+        Desenho.retanguloArredondado(s, x, y, largura, altura, altura / 2);
         float e = (float) partida.energia() / 100f;
         Color ce = e < 0.3f ? Cores.ERRO : Cores.BOM;
-        s.setColor(ce);
-        s.rect(40, 590, 220 * e, 8);
-        s.end();
+        float alfa = e < 0.3f ? 0.68f + 0.32f * MathUtils.sin(tempoTela * 7f) : 1f;
+        s.setColor(ce.r, ce.g, ce.b, alfa);
+        if (largura * e > altura) {
+            Desenho.retanguloArredondado(s, x, y, largura * e, altura, altura / 2);
+        }
     }
 
     /** Borda esquerda da parede do lado indicado. */
@@ -394,46 +526,87 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
     }
 
     /**
+     * Resposta em luz: clarão dourado no Perfeito e brilho vermelho nas bordas no erro.
+     * De propósito não há tremor de tela: num jogo de reabilitação ele atrapalha a leitura
+     * e embaralha a referência visual de quem está treinando a reação.
+     */
+    private void desenharFlashes() {
+        ShapeRenderer s = jogo.shapes;
+        if (flashPerfeito > 0.01f) {
+            Desenho.brilho();
+            s.begin(ShapeRenderer.ShapeType.Filled);
+            Desenho.cor(s, Cores.DOURADO, 0.06f * flashPerfeito);
+            s.rect(0, 0, MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA);
+            s.end();
+            Desenho.transparencia();
+        }
+        if (flashErro > 0.01f) {
+            Desenho.brilho();
+            s.begin(ShapeRenderer.ShapeType.Filled);
+            Desenho.bordasDegrade(s, MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA, Cores.ERRO, 0.22f * flashErro, 0.22f);
+            s.end();
+            Desenho.transparencia();
+        }
+    }
+
+    /**
      * Painel do bônus de sequência: multiplicador grande e a barra do que falta para o próximo nível.
      * Fica no alto, à direita, no mesmo peso visual da energia do vale.
      */
     private void desenharPainelDoBonus(ShapeRenderer s) {
         int mult = partida.combo();
         float cheio = (float) ((mult - 1) / (double) (Partida.COMBO_MAXIMO - 1));
-        s.setColor(0.05f, 0.06f, 0.14f, 0.72f);
-        Desenho.retanguloArredondado(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 12);
+        // fundo bem mais opaco que o resto da interface: é o painel que o jogador olha de relance
+        s.setColor(0.04f, 0.05f, 0.12f, 0.88f);
+        Desenho.retanguloArredondado(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 14);
+        // faixa dourada no alto, que cresce junto com o multiplicador
+        Desenho.cor(s, Cores.DOURADO, 0.25f + 0.70f * cheio);
+        s.rect(BONUS_X + 18, BONUS_Y + BONUS_A - 5, (BONUS_L - 36) * (0.25f + 0.75f * cheio), 3);
 
         // barra do progresso para o próximo nível
-        float bx = BONUS_X + 16, bl = BONUS_L - 32;
-        s.setColor(0, 0, 0, 0.45f);
-        Desenho.retanguloArredondado(s, bx, BONUS_Y + 14, bl, 8, 4);
+        float bx = BONUS_X + 18, bl = BONUS_L - 36, by = BONUS_Y + 42;
+        s.setColor(0, 0, 0, 0.5f);
+        Desenho.retanguloArredondado(s, bx, by, bl, 10, 5);
         Color c = mult >= Partida.COMBO_MAXIMO ? Cores.DOURADO : Cores.BOM;
         s.setColor(c.r, c.g, c.b, 0.95f);
         float preenchido = bl * (float) partida.progressoCombo();
         if (preenchido > 1) {
-            Desenho.retanguloArredondado(s, bx, BONUS_Y + 14, preenchido, 8, 4);
+            Desenho.retanguloArredondado(s, bx, by, preenchido, 10, 5);
         }
         // marcas dos níveis já conquistados
         for (int i = 1; i < Partida.COMBO_MAXIMO; i++) {
             float mx = bx + bl * i / (float) (Partida.COMBO_MAXIMO - 1);
-            s.setColor(1, 1, 1, i <= mult - 1 ? 0.55f : 0.18f);
-            s.rect(mx - 1, BONUS_Y + 12, 2, 12);
+            s.setColor(1, 1, 1, i <= mult - 1 ? 0.6f : 0.18f);
+            s.rect(mx - 1, by - 2, 2, 14);
+        }
+        // halo atrás do número quando a sequência está alta
+        if (cheio > 0) {
+            Desenho.brilho();
+            s.end();
+            s.begin(ShapeRenderer.ShapeType.Filled);
+            for (int i = 3; i >= 1; i--) {
+                Desenho.cor(s, Cores.DOURADO, 0.05f * cheio);
+                s.circle(BONUS_X + BONUS_L / 2, BONUS_Y + 99, 32 + 11 * i, 28);
+            }
+            s.end();
+            Desenho.transparencia();
+            s.begin(ShapeRenderer.ShapeType.Filled);
         }
         // moldura que pisca quando o multiplicador sobe
         if (brilhoCombo > 0) {
-            float g = (1 - brilhoCombo) * 10;
-            s.setColor(Cores.DOURADO.r, Cores.DOURADO.g, Cores.DOURADO.b, 0.85f * brilhoCombo);
-            Desenho.bordaArredondada(s, BONUS_X - g, BONUS_Y - g, BONUS_L + 2 * g, BONUS_A + 2 * g, 12 + g, 3);
-        } else if (cheio > 0) {
-            s.setColor(Cores.DOURADO.r, Cores.DOURADO.g, Cores.DOURADO.b, 0.20f + 0.45f * cheio);
-            Desenho.bordaArredondada(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 12, 2);
+            float g = (1 - brilhoCombo) * 12;
+            Desenho.cor(s, Cores.DOURADO, 0.9f * brilhoCombo);
+            Desenho.bordaArredondada(s, BONUS_X - g, BONUS_Y - g, BONUS_L + 2 * g, BONUS_A + 2 * g, 14 + g, 3.5f);
+        } else {
+            Desenho.cor(s, Cores.DOURADO, 0.22f + 0.5f * cheio);
+            Desenho.bordaArredondada(s, BONUS_X, BONUS_Y, BONUS_L, BONUS_A, 14, 2);
         }
     }
 
     private void desenharPartitura(ShapeRenderer s) {
         float x0 = 40, w = MaestroDoCaos.LARGURA - 80, y = 676, h = 24;
         s.setColor(0.06f, 0.07f, 0.15f, 0.75f);
-        s.rect(x0, y, w, h);
+        Desenho.retanguloArredondado(s, x0, y, w, h, 6);
         for (int i = 0; i < fase.segmentos.size(); i++) {
             Segmento seg = fase.segmentos.get(i);
             float sx = x0 + (float) (seg.inicio() / fase.duracao) * w;
@@ -445,9 +618,13 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
             }
             s.rect(sx + 1, y + 1, sw - 2, h - 2);
         }
+        // trecho já tocado, para o avanço da fase ficar visível de longe
         float px = x0 + (float) (partida.tempo() / fase.duracao) * w;
+        Desenho.cor(s, Cores.DOURADO, 0.14f);
+        s.rect(x0, y + 1, Math.max(0, px - x0), h - 2);
         s.setColor(Cores.DOURADO);
         s.rect(px - 1, y - 3, 2, h + 6);
+        s.circle(px, y + h + 4, 3, 10);
     }
 
     private void desenharTextos() {
@@ -459,25 +636,22 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
 
         // partitura
         float x0 = 40, w = MaestroDoCaos.LARGURA - 80;
-        for (Segmento seg : fase.segmentos) {
-            float sx = x0 + (float) (seg.inicio() / fase.duracao) * w;
-            Desenho.texto(jogo.batch, r.pequena, seg.rotulo(), sx + 8, 695, Cores.TEXTO_SUAVE);
+        for (int i = 0; i < fase.segmentos.size(); i++) {
+            float sx = x0 + (float) (fase.segmentos.get(i).inicio() / fase.duracao) * w;
+            Desenho.texto(jogo.batch, r.pequena, rotulos[i], sx + 8, 695, Cores.TEXTO_SUAVE);
         }
 
         // cabeçalho
         Desenho.texto(jogo.batch, r.destaque, fase.andamento, 40, 666, Cores.DOURADO);
         medidor.setText(r.destaque, fase.andamento);
-        Desenho.texto(jogo.batch, r.texto, "Fase " + fase.numero + " · " + fase.nome, 40 + medidor.width + 16, 656, Cores.TEXTO);
+        Desenho.texto(jogo.batch, r.texto, cabecalho, 40 + medidor.width + 16, 656, Cores.TEXTO);
         Desenho.texto(jogo.batch, r.pequena, "ENERGIA DO VALE", 40, 618, Cores.TEXTO);
-        int resta = (int) Math.ceil(Math.max(0, fase.duracao - partida.tempo()));
-        Desenho.textoDireita(jogo.batch, r.numeros, String.format("%d:%02d", resta / 60, resta % 60), 1240, 664, Cores.TEXTO);
+        Desenho.textoDireita(jogo.batch, r.numeros, relogio(), 1240, 668, Cores.TEXTO);
         desenharTextosDoBonus(r);
 
-        // nomes das paredes (os dois botões)
-        textoParede(r, Lado.ESQUERDO, PAREDE_E - ESPESSURA / 2, "botão vermelho  ·  ← / A",
-                proximo == Lado.ESQUERDO ? prox : 0);
-        textoParede(r, Lado.DIREITO, PAREDE_D + ESPESSURA / 2, "botão azul  ·  → / D",
-                proximo == Lado.DIREITO ? prox : 0);
+        // nomes das paredes: só o lado, sem explicar a tecla
+        textoParede(r, Lado.ESQUERDO, PAREDE_E - ESPESSURA / 2, proximo == Lado.ESQUERDO ? prox : 0);
+        textoParede(r, Lado.DIREITO, PAREDE_D + ESPESSURA / 2, proximo == Lado.DIREITO ? prox : 0);
 
         // informações acima da linha
         float topo = CY + ALTURA_PAREDE / 2 + 96;
@@ -488,97 +662,195 @@ public final class GameScreen extends ScreenAdapter implements Partida.Ouvinte {
             Desenho.textoCentro(jogo.batch, r.destaque, "pausa", CX, topo, Cores.PAUSA);
             Desenho.textoCentro(jogo.batch, r.pequena, "não aperte nenhum botão", CX, topo - 42, Cores.PAUSA);
         } else {
-            Desenho.textoCentro(jogo.batch, r.destaque, String.valueOf(Math.round(alvo.toquesPorMinuto())), CX, topo, Cores.TEXTO);
-            Desenho.textoCentro(jogo.batch, r.pequena, "toques por minuto  ·  próximo: " + proximo.nome, CX, topo - 42,
-                    corDoLado(proximo));
+            Desenho.textoCentro(jogo.batch, r.destaque, ritmo(alvo), CX, topo, Cores.TEXTO);
+            Desenho.textoCentro(jogo.batch, r.pequena, UNIDADE_DO_RITMO, CX, topo - 38, Cores.TEXTO_SUAVE);
         }
 
         // aviso de mudança na partitura
         String aviso = avisoDaPartitura(alvo);
         if (aviso != null) {
-            Desenho.textoCentro(jogo.batch, r.texto, aviso, CX, 590, Cores.TEXTO);
+            Desenho.textoCentro(jogo.batch, r.texto, aviso, CX, 558, Cores.TEXTO);
         }
 
-        // julgamento
+        // julgamento: entra com um pulo curto e vai subindo enquanto desaparece
         Julgamento j = partida.ultimoJulgamento();
         float idade = (float) partida.idadeJulgamento();
         if (j != null && idade < 0.9f) {
             float a = 1 - idade / 0.9f;
             Color c = j == Julgamento.PERFEITO ? Cores.DOURADO : j.acerto ? Cores.BOM : j.erro() ? Cores.ERRO : Cores.TEXTO;
-            String t = j.texto;
-            if (j == Julgamento.BOM) {
-                t += partida.desvioUltimo() < 0 ? " · um pouco cedo" : " · um pouco tarde";
-            } else if (j == Julgamento.BOTAO_ERRADO && esperadoNoUltimoJulgamento != null) {
-                t += ": era o " + esperadoNoUltimoJulgamento.nome;
-            }
-            Desenho.textoCentro(jogo.batch, r.destaque, t, CX, 170 + idade * 14, Desenho.comAlfa(c, a));
+            float escala = 1f + 0.22f * Math.max(0f, 1f - idade / 0.16f);
+            Desenho.textoCentroEscalado(jogo.batch, r.destaque, julgamentoTexto, CX, 170 + idade * 18,
+                    Desenho.alfa(c, a), escala);
         }
 
-        // rodapé
+        // rodapé: só as medidas da sessão e o estado do controle.
+        // As teclas de atalho saíram da tela: o jogo é para ser jogado com os dois botões,
+        // e listar P/R/M/N convidava a usar o teclado em vez da protoboard.
+        Desenho.texto(jogo.batch, r.pequena, rodape(), 40, 64, Cores.TEXTO);
+        Desenho.texto(jogo.batch, r.pequena, descricaoDoControle(), 40, 40,
+                jogo.sensor.conectado() ? Cores.BOM : Cores.TEXTO_SUAVE);
+        jogo.batch.end();
+    }
+
+    /** "Controle: ...", remontado só quando a descrição muda (o controle pode conectar depois). */
+    private String descricaoDoControle() {
+        String d = jogo.sensor.descricao();
+        if (!d.equals(descricaoSensor)) {
+            descricaoSensor = d;
+            descricaoTexto = "Controle: " + d;
+        }
+        return descricaoTexto;
+    }
+
+    /** Ritmo pedido pela partitura, em texto, remontado só quando o número muda. */
+    private String ritmo(Fase.Alvo alvo) {
+        int tpm = (int) Math.round(alvo.toquesPorMinuto());
+        if (tpm != ritmoMostrado) {
+            ritmoMostrado = tpm;
+            ritmoTexto = String.valueOf(tpm);
+        }
+        return ritmoTexto;
+    }
+
+    /** Relógio da fase, remontado só quando o segundo muda. */
+    private String relogio() {
+        int resta = (int) Math.ceil(Math.max(0, fase.duracao - partida.tempo()));
+        if (resta != relogioSegundos) {
+            relogioSegundos = resta;
+            construtor.setLength(0);
+            construtor.append(resta / 60).append(':');
+            if (resta % 60 < 10) {
+                construtor.append('0');
+            }
+            construtor.append(resta % 60);
+            relogioTexto = construtor.toString();
+        }
+        return relogioTexto;
+    }
+
+    /** Linha de métricas do rodapé, remontada só quando algum número muda. */
+    private String rodape() {
         Metricas m = partida.metricas();
         double p = m.precisao(), reac = m.reacaoMedia();
-        Desenho.texto(jogo.batch, r.pequena,
-                "Precisão " + (p < 0 ? "-" : Math.round(p * 100) + "%")
-                        + "     Reação média " + (reac < 0 ? "-" : Math.round(reac) + " ms")
-                        + "     Acertos " + m.acertos(), 40, 64, Cores.TEXTO);
-        Desenho.texto(jogo.batch, r.pequena, "Controle: " + jogo.sensor.descricao(), 40, 40,
-                jogo.sensor.conectado() ? Cores.BOM : Cores.TEXTO_SUAVE);
-        Desenho.textoDireita(jogo.batch, r.pequena,
-                "P pausa · R reinicia · M menu · N som " + (jogo.somLigado ? "ligado" : "desligado"), 1240, 40, Cores.TEXTO_SUAVE);
-        jogo.batch.end();
+        int precisao = p < 0 ? -1 : (int) Math.round(p * 100);
+        int reacao = reac < 0 ? -1 : (int) Math.round(reac);
+        int acertos = m.acertos();
+        if (precisao != rodapePrecisao || reacao != rodapeReacao || acertos != rodapeAcertos) {
+            rodapePrecisao = precisao;
+            rodapeReacao = reacao;
+            rodapeAcertos = acertos;
+            construtor.setLength(0);
+            construtor.append("Precisão ");
+            if (precisao < 0) {
+                construtor.append('-');
+            } else {
+                construtor.append(precisao).append('%');
+            }
+            construtor.append("     Reação média ");
+            if (reacao < 0) {
+                construtor.append('-');
+            } else {
+                construtor.append(reacao).append(" ms");
+            }
+            construtor.append("     Acertos ").append(acertos);
+            rodapeTexto = construtor.toString();
+        }
+        return rodapeTexto;
+    }
+
+    /** Montado uma vez por julgamento, no evento, e não a cada quadro em que o texto aparece. */
+    private String montarTextoDoJulgamento(Julgamento j, double desvioMs) {
+        if (j == Julgamento.BOM) {
+            return desvioMs < 0 ? j.texto + " · um pouco cedo" : j.texto + " · um pouco tarde";
+        }
+        if (j == Julgamento.BOTAO_ERRADO && esperadoNoUltimoJulgamento != null) {
+            return j.texto + ": era o " + esperadoNoUltimoJulgamento.nome;
+        }
+        return j.texto;
     }
 
     /** Textos do painel do bônus: rótulo, multiplicador grande, o que falta e os pontos. */
     private void desenharTextosDoBonus(Recursos r) {
         int mult = partida.combo();
         boolean maximo = mult >= Partida.COMBO_MAXIMO;
-        Color cor = mult > 1 ? Cores.DOURADO : Cores.TEXTO_SUAVE;
-        Desenho.texto(jogo.batch, r.pequena, "BÔNUS DA FASE", BONUS_X + 16, BONUS_Y + BONUS_A - 10, Cores.TEXTO);
-        Desenho.textoDireita(jogo.batch, r.destaque, "×" + mult, BONUS_X + BONUS_L - 16, BONUS_Y + BONUS_A - 8, cor);
-        String detalhe = maximo ? "bônus máximo"
-                : partida.faltamParaSubir() + (partida.faltamParaSubir() == 1 ? " acerto para ×" : " acertos para ×") + (mult + 1);
-        Desenho.texto(jogo.batch, r.pequena, detalhe, BONUS_X + 16, BONUS_Y + 44, Cores.TEXTO_SUAVE);
-        Desenho.textoDireita(jogo.batch, r.numeros, partida.pontos() + " pontos", 1240, BONUS_Y - 10, Cores.DOURADO);
+        int faltam = partida.faltamParaSubir();
+        int chave = mult * 1000 + faltam;
+        if (chave != bonusChave) {
+            bonusChave = chave;
+            bonusMultiplicador = "×" + mult;
+            bonusDetalhe = maximo ? "MÁXIMO" : "faltam " + faltam + " para ×" + (mult + 1);
+        }
+        Color cor = mult > 1 ? Cores.DOURADO : Cores.TEXTO;
+        float cx = BONUS_X + BONUS_L / 2;
+        Desenho.textoCentro(jogo.batch, r.pequena, "SEQUÊNCIA", cx, BONUS_Y + 144, Cores.TEXTO);
+        // o ×N cresce um pouco no instante em que sobe de nível, e volta ao tamanho normal
+        Desenho.textoCentroEscalado(jogo.batch, r.multiplicador, bonusMultiplicador, cx, BONUS_Y + 122,
+                cor, 1f + 0.18f * brilhoCombo);
+        Desenho.textoCentro(jogo.batch, r.pequena, bonusDetalhe, cx, BONUS_Y + 30, Cores.TEXTO_SUAVE);
+        Desenho.textoDireita(jogo.batch, r.numeros, pontos(), 1240, BONUS_Y - 10, Cores.DOURADO);
     }
 
-    private void textoParede(Recursos r, Lado lado, float cx, String detalhe, float aceso) {
-        Color c = corDoLado(lado);
-        float y = CY - ALTURA_PAREDE / 2 - 34;
-        Desenho.textoCentro(jogo.batch, r.destaque, lado.nome, cx, y, new Color(c.r, c.g, c.b, 0.6f + 0.4f * aceso));
-        Desenho.textoCentro(jogo.batch, r.pequena, detalhe, cx, y - 46, Cores.TEXTO_SUAVE);
+    private String pontos() {
+        if (partida.pontos() != pontosMostrados) {
+            pontosMostrados = partida.pontos();
+            pontosTexto = pontosMostrados + " pontos";
+        }
+        return pontosTexto;
     }
 
-    /** Avisa três segundos antes de cada mudança de trecho. */
+    private void textoParede(Recursos r, Lado lado, float cx, float aceso) {
+        Desenho.textoCentro(jogo.batch, r.destaque, lado.nome, cx, CY - ALTURA_PAREDE / 2 - 20,
+                Desenho.alfa(corDoLado(lado), 0.65f + 0.35f * aceso));
+    }
+
+    /** Avisa três segundos antes de cada mudança de trecho. O texto é remontado só quando muda. */
     private String avisoDaPartitura(Fase.Alvo alvo) {
         if (estado != Estado.JOGANDO) {
+            avisoChave = -1;
             return null;
         }
         int prox = alvo.indice() + 1;
+        long chave;
         if (prox < fase.segmentos.size() && alvo.restante() <= 3) {
-            Segmento s = fase.segmentos.get(prox);
-            int seg = (int) Math.ceil(alvo.restante());
-            return switch (s.tipo) {
-                case PAUSA -> "Em " + seg + " s: pausa de " + Math.round(s.duracao) + " s, prepare-se para segurar";
-                case VARIACAO -> "Em " + seg + " s: o ritmo vai " + (s.ate > s.de ? "acelerar" : "desacelerar");
-                case TEMPO -> "Em " + seg + " s: novo ritmo, " + Math.round(s.de) + " toques por minuto";
-            };
+            chave = prox * 10L + (int) Math.ceil(alvo.restante());
+        } else if (alvo.segmento().tipo == Segmento.Tipo.VARIACAO) {
+            chave = -2;
+        } else {
+            avisoChave = -1;
+            return null;
         }
-        if (alvo.segmento().tipo == Segmento.Tipo.VARIACAO) {
-            return alvo.segmento().ate > alvo.segmento().de ? "O ritmo está acelerando" : "O ritmo está desacelerando";
+        if (chave == avisoChave) {
+            return avisoTexto;
         }
-        return null;
+        avisoChave = chave;
+        if (chave == -2) {
+            avisoTexto = alvo.segmento().ate > alvo.segmento().de
+                    ? "O ritmo está acelerando" : "O ritmo está desacelerando";
+            return avisoTexto;
+        }
+        Segmento s = fase.segmentos.get(prox);
+        int seg = (int) Math.ceil(alvo.restante());
+        avisoTexto = switch (s.tipo) {
+            case PAUSA -> "Em " + seg + " s: pausa de " + Math.round(s.duracao) + " s, prepare-se para segurar";
+            case VARIACAO -> "Em " + seg + " s: o ritmo vai " + (s.ate > s.de ? "acelerar" : "desacelerar");
+            case TEMPO -> "Em " + seg + " s: novo ritmo, " + Math.round(s.de) + " toques por minuto";
+        };
+        return avisoTexto;
     }
 
     private void desenharPausa() {
         Desenho.transparencia();
         jogo.shapes.begin(ShapeRenderer.ShapeType.Filled);
-        jogo.shapes.setColor(0.03f, 0.04f, 0.10f, 0.7f);
+        jogo.shapes.setColor(0.03f, 0.04f, 0.10f, 0.72f);
         jogo.shapes.rect(0, 0, MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA);
+        jogo.shapes.setColor(0.07f, 0.08f, 0.17f, 0.92f);
+        Desenho.retanguloArredondado(jogo.shapes, 390, 282, 500, 190, 18);
+        Desenho.cor(jogo.shapes, Cores.DOURADO, 0.35f);
+        Desenho.bordaArredondada(jogo.shapes, 390, 282, 500, 190, 18, 2);
         jogo.shapes.end();
         jogo.batch.begin();
-        Desenho.textoCentro(jogo.batch, jogo.recursos.titulo, "Pausado", 640, 420, Cores.DOURADO);
+        Desenho.textoCentro(jogo.batch, jogo.recursos.titulo, "Pausado", 640, 430, Cores.DOURADO);
         Desenho.textoCentro(jogo.batch, jogo.recursos.texto, "O tempo da fase está parado.", 640, 350, Cores.TEXTO);
-        Desenho.textoCentro(jogo.batch, jogo.recursos.texto, "P continua  ·  R reinicia  ·  M volta ao menu", 640, 310, Cores.TEXTO_SUAVE);
         jogo.batch.end();
     }
 

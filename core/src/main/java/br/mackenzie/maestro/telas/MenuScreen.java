@@ -15,6 +15,7 @@ import com.badlogic.gdx.Input;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
+import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
@@ -35,13 +36,22 @@ public class MenuScreen extends ScreenAdapter {
 
     private static final float CARD_L = 178, CARD_A = 250, CARD_Y = 196, CARD_ESPACO = 18;
     private static final float CARD_MARGEM = 14;
+    /** Estrelas prontas para 0, 1, 2 e 3: evita montar a string a cada quadro, por cartão. */
+    private static final String[] ESTRELAS = {
+            "☆☆☆", "★☆☆", "★★☆", "★★★"};
 
     private final MaestroDoCaos jogo;
     private final Viewport viewport = new FitViewport(MaestroDoCaos.LARGURA, MaestroDoCaos.ALTURA);
     private final Cenario cenario;
     private final List<Toque> toques = new ArrayList<>();
+    /** Tom neutro do cartão do cenário, guardado para não criar um vetor por quadro. */
+    private final float[] tomNeutro = {1, 1, 1};
     private int selecionada;
     private float tempo;
+    /** 0 a 1: cresce quando a seleção muda, para o cartão escolhido entrar com um pulo. */
+    private float entradaDoCartao = 1;
+    private int indiceCenarioMostrado = -1;
+    private String contagemDeCenarios = "";
 
     public MenuScreen(MaestroDoCaos jogo, int faseSelecionada) {
         this.jogo = jogo;
@@ -71,6 +81,7 @@ public class MenuScreen extends ScreenAdapter {
     @Override
     public void render(float delta) {
         tempo += delta;
+        entradaDoCartao = Math.min(1, entradaDoCartao + delta * 5f);
         if (tratarEntrada()) {
             return;
         }
@@ -82,11 +93,11 @@ public class MenuScreen extends ScreenAdapter {
         Recursos r = jogo.recursos;
 
         // no cartão do cenário o fundo aparece sem o tom da fase, para dar para julgar a imagem
-        float[] tom = noCartaoDoCenario() ? new float[]{1, 1, 1} : Fases.numero(selecionada + 1).tom;
+        float[] tom = noCartaoDoCenario() ? tomNeutro : Fases.numero(selecionada + 1).tom;
         jogo.batch.begin();
         cenario.desenharFundo(jogo.batch, tom, 0.15f);
         jogo.batch.end();
-        cenario.desenharEfeitos(jogo.shapes, delta, 0.55f + 0.35f * (float) Math.sin(tempo * 0.4f));
+        cenario.desenharEfeitos(jogo.shapes, delta, 0.55f + 0.35f * MathUtils.sin(tempo * 0.4f));
 
         // painel escuro atrás do conteúdo
         Desenho.transparencia();
@@ -94,17 +105,27 @@ public class MenuScreen extends ScreenAdapter {
         s.begin(ShapeRenderer.ShapeType.Filled);
         s.setColor(0.05f, 0.06f, 0.13f, 0.78f);
         Desenho.retanguloArredondado(s, 40, 60, 1200, 600, 18);
+        s.setColor(1, 1, 1, 0.06f);
+        Desenho.bordaArredondada(s, 40, 60, 1200, 600, 18, 1.5f);
         for (int i = 0; i < itens(); i++) {
-            float x = cardX(i);
-            boolean sel = i == selecionada;
-            s.setColor(sel ? 0.16f : 0.10f, sel ? 0.15f : 0.11f, sel ? 0.28f : 0.22f, 0.95f);
-            Desenho.retanguloArredondado(s, x, CARD_Y, CARD_L, CARD_A, 12);
-            if (sel) {
-                s.setColor(Cores.DOURADO);
-                Desenho.bordaArredondada(s, x, CARD_Y, CARD_L, CARD_A, 12, 3);
-            }
+            desenharMolduraDoCartao(s, i);
         }
         s.end();
+
+        // brilho dourado atrás do título e do cartão escolhido
+        Desenho.brilho();
+        s.begin(ShapeRenderer.ShapeType.Filled);
+        Desenho.cor(s, Cores.DOURADO, 0.05f);
+        Desenho.retanguloArredondado(s, 380, 556, 520, 90, 45);
+        float sx = cardX(selecionada);
+        float pulso = 0.5f + 0.5f * MathUtils.sin(tempo * 2.4f);
+        for (int i = 3; i >= 1; i--) {
+            float g = 4f * i;
+            Desenho.cor(s, Cores.DOURADO, 0.030f + 0.018f * pulso);
+            Desenho.retanguloArredondado(s, sx - g, CARD_Y - g, CARD_L + 2 * g, CARD_A + 2 * g, 12 + g);
+        }
+        s.end();
+        Desenho.transparencia();
 
         jogo.batch.begin();
         Desenho.textoCentro(jogo.batch, r.pequena, "JOGO SÉRIO  ·  REABILITAÇÃO DA REAÇÃO MOTORA", 640, 630, Cores.TEXTO_SUAVE);
@@ -119,22 +140,42 @@ public class MenuScreen extends ScreenAdapter {
         }
         desenharCartaoDeCenario(r);
 
+        // só os dois botões aparecem como instrução: as teclas existem, mas não se anunciam,
+        // para o jogo ser aprendido e treinado com o controle da protoboard
         Desenho.textoCentro(jogo.batch, r.texto, noCartaoDoCenario()
-                        ? "Botão esquerdo (← / A): avançar     Botão direito (→ / D): trocar o cenário"
-                        : "Botão esquerdo (← / A): avançar     Botão direito (→ / D): começar",
-                640, 170, Cores.TEXTO);
-        Desenho.textoCentro(jogo.batch, r.pequena,
-                "Só os dois botões bastam: o esquerdo passa de cartão, o direito confirma  ·  ESC sai",
-                640, 138, Cores.TEXTO_SUAVE);
-        Desenho.textoCentro(jogo.batch, r.pequena, "Controle: " + jogo.sensor.descricao(), 640, 96,
+                        ? "BOTÃO ESQUERDO: avançar          BOTÃO DIREITO: trocar o cenário"
+                        : "BOTÃO ESQUERDO: avançar          BOTÃO DIREITO: começar",
+                640, 168, Cores.TEXTO);
+        Desenho.textoCentro(jogo.batch, r.pequena, "Controle: " + jogo.sensor.descricao(), 640, 126,
                 jogo.sensor.conectado() ? Cores.BOM : Cores.TEXTO_SUAVE);
         jogo.batch.end();
+    }
+
+    /**
+     * Fundo e moldura de um cartão. O escolhido fica mais claro, ganha uma faixa dourada no alto
+     * e uma borda que engrossa no instante em que a seleção muda.
+     */
+    private void desenharMolduraDoCartao(ShapeRenderer s, int i) {
+        float x = cardX(i);
+        boolean sel = i == selecionada;
+        s.setColor(sel ? 0.17f : 0.10f, sel ? 0.16f : 0.11f, sel ? 0.30f : 0.22f, 0.95f);
+        Desenho.retanguloArredondado(s, x, CARD_Y, CARD_L, CARD_A, 12);
+        if (!sel) {
+            s.setColor(1, 1, 1, 0.05f);
+            Desenho.bordaArredondada(s, x, CARD_Y, CARD_L, CARD_A, 12, 1f);
+            return;
+        }
+        float entrada = 1 - entradaDoCartao;
+        s.setColor(Cores.DOURADO);
+        Desenho.bordaArredondada(s, x, CARD_Y, CARD_L, CARD_A, 12, 3 + 3 * entrada);
+        Desenho.cor(s, Cores.DOURADO, 0.85f);
+        s.rect(x + 16, CARD_Y + CARD_A - 5, CARD_L - 32, 3);
     }
 
     private void desenharCartaoDeFase(Recursos r, int i) {
         Fase f = Fases.TODAS.get(i);
         float x = cardX(i), cx = x + CARD_L / 2;
-        int estrelas = jogo.historico.melhoresEstrelas(f.numero);
+        int estrelas = MathUtils.clamp(jogo.historico.melhoresEstrelas(f.numero), 0, 3);
         Desenho.texto(jogo.batch, r.pequena, "FASE " + f.numero, x + 14, 432, Cores.TEXTO_SUAVE);
         Desenho.textoCentro(jogo.batch, r.destaque, f.andamento, cx, 408, Cores.DOURADO);
         Desenho.textoCentro(jogo.batch, r.texto, f.nome, cx, 358, Cores.TEXTO);
@@ -143,7 +184,8 @@ public class MenuScreen extends ScreenAdapter {
         jogo.batch.setColor(1, 1, 1, 1);
         r.pequena.setColor(Cores.TEXTO_SUAVE);
         r.pequena.draw(jogo.batch, f.foco, x + CARD_MARGEM, 274, CARD_L - 2 * CARD_MARGEM, Align.center, true);
-        Desenho.textoCentro(jogo.batch, r.texto, "★".repeat(estrelas) + "☆".repeat(3 - estrelas), cx, 228, Cores.DOURADO);
+        Desenho.textoCentro(jogo.batch, r.texto, ESTRELAS[estrelas], cx, 228,
+                estrelas > 0 ? Cores.DOURADO : Cores.TEXTO_SUAVE);
     }
 
     /** Último cartão: mostra o cenário atual e, selecionado, troca de imagem com o botão direito. */
@@ -163,11 +205,14 @@ public class MenuScreen extends ScreenAdapter {
         jogo.batch.draw(t, mx, my, mw, mh,
                 (t.getWidth() - recorteL) / 2, (t.getHeight() - recorteA) / 2, recorteL, recorteA, false, false);
 
+        if (r.indiceFundo() != indiceCenarioMostrado) {
+            indiceCenarioMostrado = r.indiceFundo();
+            contagemDeCenarios = (indiceCenarioMostrado + 1) + " de " + Fundos.TODOS.size();
+        }
         Desenho.textoCentro(jogo.batch, r.texto, r.fundoAtual().nome, cx, my - 20, Cores.DOURADO);
-        Desenho.textoCentro(jogo.batch, r.pequena,
-                (r.indiceFundo() + 1) + " de " + Fundos.TODOS.size(), cx, my - 44, Cores.TEXTO_SUAVE);
+        Desenho.textoCentro(jogo.batch, r.pequena, contagemDeCenarios, cx, my - 44, Cores.TEXTO_SUAVE);
         r.pequena.setColor(Cores.TEXTO_SUAVE);
-        r.pequena.draw(jogo.batch, "O botão direito troca a imagem",
+        r.pequena.draw(jogo.batch, "o botão direito troca a imagem",
                 x + CARD_MARGEM, 248, CARD_L - 2 * CARD_MARGEM, Align.center, true);
     }
 
@@ -193,6 +238,7 @@ public class MenuScreen extends ScreenAdapter {
         for (Toque t : toques) {
             if (t.lado() == Lado.ESQUERDO) {
                 selecionada = (selecionada + 1) % itens();
+                entradaDoCartao = 0;
             } else if (confirmar()) {
                 return true;
             }

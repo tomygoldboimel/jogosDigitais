@@ -34,7 +34,8 @@ public final class Fundos {
             new Fundo("Crepúsculo", "imagens/cenarioCrepusculo.jpg", true, 0.782f, 0.272f, 0.053f, 0.80f),
             new Fundo("Entardecer", "imagens/cenarioEntardecer.jpg", false, 0.782f, 0.272f, 0.053f, 0.55f),
             new Fundo("Amanhecer", "imagens/cenarioAmanhecer.jpg", false, 0.782f, 0.272f, 0.053f, 0.45f),
-            new Fundo("Dia", "imagens/cenarioDia.jpg", false, 0.782f, 0.272f, 0.053f, 0.25f));
+            new Fundo("Dia", "imagens/cenarioDia.jpg", false, 0.782f, 0.272f, 0.053f, 0.25f),
+            new Fundo("Neve", "imagens/cenarioNeve.jpg", false, 0.782f, 0.272f, 0.053f, 0.35f));
 
     public static int indiceValido(int i) {
         return i < 0 || i >= TODOS.size() ? 0 : i;
